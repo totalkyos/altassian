@@ -42,6 +42,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 import static org.junit.Assert.assertEquals;
 
 
@@ -184,9 +185,9 @@ public class MemberListTest {
 
         // Simulates node2 getting an out of order member list. That causes node2 to think it's the master.
         List<MemberInfo> members = new ArrayList<MemberInfo>();
-        members.add(new MemberInfo(m2.getAddress(), m2.getUuid(), Collections. <String, Object> emptyMap()));
-        members.add(new MemberInfo(m3.getAddress(), m3.getUuid(), Collections. <String, Object> emptyMap()));
-        members.add(new MemberInfo(m1.getAddress(), m1.getUuid(), Collections. <String, Object> emptyMap()));
+        members.add(new MemberInfo(m2.getAddress(), m2.getUuid(), MemberRole.none(), Collections. <String, Object> emptyMap()));
+        members.add(new MemberInfo(m3.getAddress(), m3.getUuid(), MemberRole.none(), Collections. <String, Object> emptyMap()));
+        members.add(new MemberInfo(m1.getAddress(), m1.getUuid(), MemberRole.none(), Collections. <String, Object> emptyMap()));
         n2.clusterService.updateMembers(members);
         n2.setMasterAddress(m2.getAddress());
 
@@ -236,8 +237,8 @@ public class MemberListTest {
         final Node n2 = TestUtil.getNode(h2);
         // Simulates node2 getting an out of order member list. That causes node2 to think it's the master.
         List<MemberInfo> members = new ArrayList<MemberInfo>();
-        members.add(new MemberInfo(m1.getAddress(), m1.getUuid(), Collections. <String, Object> emptyMap()));
-        members.add(new MemberInfo(m2.getAddress(), m2.getUuid(), Collections. <String, Object> emptyMap()));
+        members.add(new MemberInfo(m1.getAddress(), m1.getUuid(), MemberRole.none(), Collections. <String, Object> emptyMap()));
+        members.add(new MemberInfo(m2.getAddress(), m2.getUuid(), MemberRole.none(), Collections. <String, Object> emptyMap()));
         n2.clusterService.updateMembers(members);
 
         // Give the cluster some time to figure things out. The merge and heartbeat code should have kicked in by this point

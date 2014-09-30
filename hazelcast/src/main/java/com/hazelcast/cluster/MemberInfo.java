@@ -24,12 +24,17 @@ import com.hazelcast.nio.serialization.DataSerializable;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 public class MemberInfo implements DataSerializable {
     Address address;
     String uuid;
     Map<String, Object> attributes;
+    Set<MemberRole> roles = MemberRole.all();
 
     public MemberInfo() {
     }
@@ -39,15 +44,16 @@ public class MemberInfo implements DataSerializable {
         this.address = address;
     }
 
-    public MemberInfo(Address address, String uuid, Map<String, Object> attributes) {
+    public MemberInfo(Address address, String uuid, Set<MemberRole> roles, Map<String, Object> attributes) {
         super();
         this.address = address;
         this.uuid = uuid;
+        this.roles = roles;
         this.attributes = new HashMap<String, Object>(attributes);
     }
 
     public MemberInfo(MemberImpl member) {
-        this(member.getAddress(), member.getUuid(), member.getAttributes());
+        this(member.getAddress(), member.getUuid(), member.getRoles(), member.getAttributes());
     }
 
     @Override
@@ -57,7 +63,15 @@ public class MemberInfo implements DataSerializable {
         if (in.readBoolean()) {
             uuid = in.readUTF();
         }
+
+        roles = new HashSet<MemberRole>();
+
         int size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            roles.add(MemberRole.valueOf(in.readUTF()));
+        }
+
+        size = in.readInt();
         if (size > 0) {
             attributes = new HashMap<String, Object>();
         }
@@ -76,6 +90,12 @@ public class MemberInfo implements DataSerializable {
         if (hasUuid) {
             out.writeUTF(uuid);
         }
+
+        out.writeInt(roles.size());
+        for (MemberRole role : roles) {
+            out.writeUTF(role.name());
+        }
+
         out.writeInt(attributes == null ? 0 : attributes.size());
         if (attributes != null) {
             for (Map.Entry<String, Object> entry : attributes.entrySet()) {

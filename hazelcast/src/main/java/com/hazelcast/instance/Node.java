@@ -19,26 +19,9 @@ package com.hazelcast.instance;
 import com.hazelcast.ascii.TextCommandService;
 import com.hazelcast.ascii.TextCommandServiceImpl;
 import com.hazelcast.client.impl.ClientEngineImpl;
-import com.hazelcast.cluster.ClusterServiceImpl;
-import com.hazelcast.cluster.ConfigCheck;
-import com.hazelcast.cluster.JoinRequest;
-import com.hazelcast.cluster.Joiner;
-import com.hazelcast.cluster.MulticastJoiner;
-import com.hazelcast.cluster.MulticastService;
-import com.hazelcast.cluster.NodeMulticastListener;
-import com.hazelcast.cluster.TcpIpJoiner;
-import com.hazelcast.config.Config;
-import com.hazelcast.config.JoinConfig;
-import com.hazelcast.config.ListenerConfig;
-import com.hazelcast.config.MemberAttributeConfig;
-import com.hazelcast.config.MulticastConfig;
-import com.hazelcast.config.SerializationConfig;
-import com.hazelcast.core.DistributedObjectListener;
-import com.hazelcast.core.HazelcastInstanceAware;
-import com.hazelcast.core.LifecycleListener;
-import com.hazelcast.core.MembershipListener;
-import com.hazelcast.core.MigrationListener;
-import com.hazelcast.core.PartitioningStrategy;
+import com.hazelcast.cluster.*;
+import com.hazelcast.config.*;
+import com.hazelcast.core.*;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.LoggingServiceImpl;
 import com.hazelcast.management.ManagementCenterService;
@@ -69,10 +52,12 @@ import java.nio.channels.ServerSocketChannel;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.hazelcast.instance.NodeShutdownHelper.shutdownNodeByFiringEvents;
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 public class Node {
 
@@ -154,7 +139,8 @@ public class Node {
         try {
             address = addressPicker.getPublicAddress();
             final Map<String, Object> memberAttributes = findMemberAttributes(config.getMemberAttributeConfig().asReadOnly());
-            localMember = new MemberImpl(address, true, UuidUtil.createMemberUuid(address), hazelcastInstance, memberAttributes);
+            localMember = new MemberImpl(address, true, UuidUtil.createMemberUuid(address), hazelcastInstance,
+                    config.getMemberRol(), memberAttributes);
             loggingService.setThisMember(localMember);
             logger = loggingService.getLogger(Node.class.getName());
             initializer = NodeInitializerFactory.create(configClassLoader);
@@ -518,7 +504,11 @@ public class Node {
 
         return new JoinRequest(Packet.VERSION, buildInfo.getBuildNumber(), address,
                 localMember.getUuid(), createConfigCheck(), credentials, clusterService.getSize(), 0,
-                config.getMemberAttributeConfig().getAttributes());
+                localMember.getRoles(), config.getMemberAttributeConfig().getAttributes());
+    }
+
+    public void updateRoles(Set<MemberRole> roles) {
+        this.localMember.setRoles(roles);
     }
 
     public ConfigCheck createConfigCheck() {

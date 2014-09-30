@@ -28,19 +28,8 @@ import com.hazelcast.client.impl.client.GetDistributedObjectsRequest;
 import com.hazelcast.client.impl.client.txn.ClientTransactionManager;
 import com.hazelcast.client.proxy.ClientClusterProxy;
 import com.hazelcast.client.proxy.PartitionServiceProxy;
-import com.hazelcast.client.spi.ClientClusterService;
-import com.hazelcast.client.spi.ClientExecutionService;
-import com.hazelcast.client.spi.ClientInvocationService;
-import com.hazelcast.client.spi.ClientListenerService;
-import com.hazelcast.client.spi.ClientPartitionService;
-import com.hazelcast.client.spi.ProxyManager;
-import com.hazelcast.client.spi.impl.AwsAddressTranslator;
-import com.hazelcast.client.spi.impl.ClientClusterServiceImpl;
-import com.hazelcast.client.spi.impl.ClientExecutionServiceImpl;
-import com.hazelcast.client.spi.impl.ClientInvocationServiceImpl;
-import com.hazelcast.client.spi.impl.ClientListenerServiceImpl;
-import com.hazelcast.client.spi.impl.ClientPartitionServiceImpl;
-import com.hazelcast.client.spi.impl.DefaultAddressTranslator;
+import com.hazelcast.client.spi.*;
+import com.hazelcast.client.spi.impl.*;
 import com.hazelcast.client.util.RoundRobinLB;
 import com.hazelcast.collection.list.ListService;
 import com.hazelcast.collection.set.SetService;
@@ -53,29 +42,7 @@ import com.hazelcast.concurrent.lock.LockServiceImpl;
 import com.hazelcast.concurrent.semaphore.SemaphoreService;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.GroupConfig;
-import com.hazelcast.core.Client;
-import com.hazelcast.core.ClientService;
-import com.hazelcast.core.Cluster;
-import com.hazelcast.core.DistributedObject;
-import com.hazelcast.core.DistributedObjectListener;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.IAtomicLong;
-import com.hazelcast.core.IAtomicReference;
-import com.hazelcast.core.ICountDownLatch;
-import com.hazelcast.core.IExecutorService;
-import com.hazelcast.core.IList;
-import com.hazelcast.core.ILock;
-import com.hazelcast.core.IMap;
-import com.hazelcast.core.IQueue;
-import com.hazelcast.core.ISemaphore;
-import com.hazelcast.core.ISet;
-import com.hazelcast.core.ITopic;
-import com.hazelcast.core.IdGenerator;
-import com.hazelcast.core.LifecycleService;
-import com.hazelcast.core.MultiMap;
-import com.hazelcast.core.PartitionService;
-import com.hazelcast.core.PartitioningStrategy;
-import com.hazelcast.core.ReplicatedMap;
+import com.hazelcast.core.*;
 import com.hazelcast.executor.impl.DistributedExecutorService;
 import com.hazelcast.instance.GroupProperties;
 import com.hazelcast.instance.OutOfMemoryErrorDispatcher;
@@ -105,11 +72,14 @@ import com.hazelcast.util.ExceptionUtil;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
+
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 /**
  * Hazelcast Client enables you to do all Hazelcast operations without
@@ -340,6 +310,11 @@ public final class HazelcastClient implements HazelcastInstance {
         //this method will be deleted in the near future.
         String name = LockProxy.convertToStringKey(key, serializationService);
         return getDistributedObject(LockServiceImpl.SERVICE_NAME, name);
+    }
+
+    @Override
+    public void updateRoles(Set<MemberRole> roles) {
+        throw new UnsupportedOperationException("Client instances cannot change their rol in the cluster");
     }
 
     @Override
