@@ -19,6 +19,7 @@ package com.hazelcast.instance;
 import com.hazelcast.cluster.ClusterDataSerializerHook;
 import com.hazelcast.cluster.MemberAttributeChangedOperation;
 import com.hazelcast.cluster.MemberAttributeOperationType;
+import com.hazelcast.cluster.MemberRoleChangedOperation;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.HazelcastInstanceAware;
 import com.hazelcast.core.Member;
@@ -38,9 +39,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.hazelcast.cluster.MemberAttributeOperationType.PUT;
@@ -58,8 +57,10 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
     private volatile long lastWrite;
     private volatile long lastPing;
     private volatile ILogger logger;
+    private volatile Set<MemberRole> roles;
 
     public MemberImpl() {
+        this(null, false);
     }
 
     public MemberImpl(Address address, boolean localMember) {
@@ -72,11 +73,19 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
 
     public MemberImpl(Address address, boolean localMember, String uuid, HazelcastInstanceImpl instance,
                       Map<String, Object> attributes) {
+        this(address, localMember, uuid, instance, MemberRole.all(), attributes);
+    }
+
+    public MemberImpl(Address address, boolean localMember, String uuid, HazelcastInstanceImpl instance,
+                      Set<MemberRole> roles, Map<String, Object> attributes) {
         this.localMember = localMember;
         this.address = address;
         this.lastRead = Clock.currentTimeMillis();
         this.uuid = uuid;
         this.instance = instance;
+
+        this.roles = roles == null ? new HashSet<MemberRole>() : new HashSet<MemberRole>(roles);
+
         if (attributes != null) {
             this.attributes.putAll(attributes);
         }
@@ -87,6 +96,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         this.address = member.address;
         this.lastRead = member.lastRead;
         this.uuid = member.uuid;
+        this.roles = new HashSet<MemberRole>(member.roles);
         this.attributes.putAll(member.attributes);
     }
 
@@ -112,6 +122,24 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
     @Override
     public InetSocketAddress getInetSocketAddress() {
         return getSocketAddress();
+    }
+
+    public Set<MemberRole> getRoles() {
+        return new HashSet<MemberRole>(roles);
+    }
+
+    public boolean setRoles(Set<MemberRole> roles) {
+        if (this.roles.equals(roles)) {
+            return false;
+        }
+
+        this.roles = new HashSet<MemberRole>(roles);
+
+        if (localMember) {
+            invokeOnAllMembers(new MemberRoleChangedOperation(uuid, roles));
+        }
+
+        return true;
     }
 
     @Override
@@ -337,6 +365,13 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         address.readData(in);
         uuid = in.readUTF();
         int size = in.readInt();
+        Set<MemberRole> roles = new HashSet<MemberRole>();
+        for (int i = 0; i < size; i++) {
+            roles.add(MemberRole.valueOf(in.readUTF()));
+        }
+        this.roles = roles;
+
+        size = in.readInt();
         for (int i = 0; i < size; i++) {
             String key = in.readUTF();
             Object value = IOUtil.readAttributeValue(in);
@@ -348,6 +383,13 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
     public void writeData(ObjectDataOutput out) throws IOException {
         address.writeData(out);
         out.writeUTF(uuid);
+
+        Set<MemberRole> roles = getRoles();
+        out.writeInt(roles.size());
+        for (MemberRole role : roles) {
+            out.writeUTF(role.name());
+        }
+
         Map<String, Object> attributes = new HashMap<String, Object>(this.attributes);
         out.writeInt(attributes.size());
         for (Map.Entry<String, Object> entry : attributes.entrySet()) {
@@ -363,6 +405,10 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
     @Override
     public int getId() {
         return ClusterDataSerializerHook.MEMBER;
+    }
+
+    public boolean hasRole(MemberRole role) {
+        return roles.contains(role);
     }
 
     @Override
@@ -408,4 +454,18 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         return true;
     }
 
+    public static enum MemberRole {
+        EXECUTOR,
+        PARTITION_HOST;
+
+        public static Set<MemberRole> all() {
+            Set<MemberRole> roles = new HashSet<MemberRole>();
+            Collections.addAll(roles, PARTITION_HOST, EXECUTOR);
+            return roles;
+        }
+
+        public static Set<MemberRole> none() {
+            return new HashSet<MemberRole>();
+        }
+    }
 }

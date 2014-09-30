@@ -21,23 +21,18 @@ import com.hazelcast.core.ManagedContext;
 
 import java.io.File;
 import java.net.URL;
-import java.util.Collection;
-import java.util.Map;
-import java.util.List;
-import java.util.Set;
-import java.util.Properties;
-import java.util.HashSet;
-import java.util.LinkedList;
+import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 import static com.hazelcast.partition.strategy.StringPartitioningStrategy.getBaseName;
 import static java.text.MessageFormat.format;
 
 /**
  * Contains all the configuration to start a {@link com.hazelcast.core.HazelcastInstance}. A Config
- * can be created programmatically, but can also be configured using XML, see {@link com.hazelcast.config.XmlConfigBuilder}.
+ * can be created programmatically, but can also be configured using XML, see {@link XmlConfigBuilder}.
  * <p/>
  * Config instances can be shared between threads, but should not be modified after they are used to
  * create HazelcastInstances.
@@ -99,6 +94,8 @@ public class Config {
     private MemberAttributeConfig memberAttributeConfig = new MemberAttributeConfig();
 
     private String licenseKey;
+
+    private Set<MemberRole> memberRoles = MemberRole.all();
 
     public Config() {
     }
@@ -170,6 +167,15 @@ public class Config {
     public Config setInstanceName(String instanceName) {
         this.instanceName = instanceName;
         return this;
+    }
+
+    public Config setMemberRoles(Set<MemberRole> roles) {
+        this.memberRoles = roles;
+        return this;
+    }
+
+    public Set<MemberRole> getMemberRol() {
+        return memberRoles;
     }
 
     public GroupConfig getGroupConfig() {
@@ -467,7 +473,7 @@ public class Config {
     public TopicConfig findTopicConfig(String name) {
         String baseName = getBaseName(name);
         TopicConfig config = lookupByPattern(topicConfigs, baseName);
-        if (config != null) {
+        if (config  != null) {
             return config.getAsReadOnly();
         }
         return getTopicConfig("default").getAsReadOnly();
