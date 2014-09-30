@@ -115,8 +115,9 @@ public final class BasicOperationScheduler {
         this.responseThreads = new ResponseThread[getResponseThreadCount()];
         initResponseThreads(responseThreads, new ResponseThreadFactory());
 
-        logger.info("Starting with " + genericOperationThreads.length + " generic operation threads and "
-                + partitionOperationThreads.length + " partition operation threads.");
+        logger.info("Starting with " + genericOperationThreads.length + " generic operation threads, "
+                + partitionOperationThreads.length + " partition operation threads and"
+                + responseThreads.length + " response threads.");
     }
 
     @edu.umd.cs.findbugs.annotations.SuppressWarnings({ "NP_NONNULL_PARAM_VIOLATION" })
@@ -348,20 +349,22 @@ public final class BasicOperationScheduler {
         shutdown = true;
         interruptAll(partitionOperationThreads);
         interruptAll(genericOperationThreads);
+        interruptAll(responseThreads);
         awaitTermination(partitionOperationThreads);
         awaitTermination(genericOperationThreads);
+        awaitTermination(responseThreads);
     }
 
-    private static void interruptAll(OperationThread[] operationThreads) {
-        for (OperationThread thread : operationThreads) {
+    private static void interruptAll(Thread[] threads) {
+        for (Thread thread : threads) {
             thread.interrupt();
         }
     }
 
-    private static void awaitTermination(OperationThread[] operationThreads) {
-        for (OperationThread thread : operationThreads) {
+    private static void awaitTermination(Thread[] threads) {
+        for (Thread thread : threads) {
             try {
-                thread.awaitTermination(TERMINATION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                thread.join(TimeUnit.SECONDS.toMillis(TERMINATION_TIMEOUT_SECONDS));
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             }
@@ -482,10 +485,6 @@ public final class BasicOperationScheduler {
 
                 process(task);
             }
-        }
-
-        public void awaitTermination(int timeout, TimeUnit unit) throws InterruptedException {
-            join(unit.toMillis(timeout));
         }
     }
 
