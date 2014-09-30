@@ -20,6 +20,7 @@ import com.hazelcast.cluster.MemberInfo;
 import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.MigrationEvent;
 import com.hazelcast.core.MigrationListener;
+import com.hazelcast.instance.GroupProperties;
 import com.hazelcast.instance.MemberImpl;
 import com.hazelcast.instance.Node;
 import com.hazelcast.logging.ILogger;
@@ -213,6 +214,8 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
         executionService.scheduleWithFixedDelay(new SyncReplicaVersionTask(),
                 backupSyncCheckInterval, backupSyncCheckInterval, TimeUnit.SECONDS);
+
+        logger.info("Initialized delayed partition service");
     }
 
     @Override
@@ -315,13 +318,13 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         if (!member.localMember()) {
             updateMemberGroupsSize();
         }
+
         if (node.isMaster() && node.isActive()) {
+            enqueueMigration();
+
             lock.lock();
             try {
-                migrationQueue.clear();
                 if (initialized) {
-                    migrationQueue.add(new RepartitioningTask());
-
                     // send initial partition table to newly joined node.
                     Collection<MemberImpl> members = node.clusterService.getMemberList();
                     PartitionStateOperation op = new PartitionStateOperation(createPartitionState(members));
@@ -331,6 +334,26 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                 lock.unlock();
             }
         }
+    }
+
+    private void enqueueMigration() {
+        GroupProperties groupProperties = node.getGroupProperties();
+        logger.info(String.format("Delaying repartitioning for [%d] seconds", groupProperties.PARTITION_MIGRATION_DELAY.getLong()));
+        nodeEngine.getExecutionService().schedule(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        lock.lock();
+                        try {
+                            migrationQueue.clear();
+                            if (initialized) {
+                                migrationQueue.add(new RepartitioningTask());
+                            }
+                        } finally {
+                            lock.unlock();
+                        }
+                    }
+                }, groupProperties.PARTITION_MIGRATION_DELAY.getLong(), TimeUnit.SECONDS);
     }
 
     public void memberRemoved(final MemberImpl member) {
