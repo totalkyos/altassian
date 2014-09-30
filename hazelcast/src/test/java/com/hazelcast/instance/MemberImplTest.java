@@ -33,9 +33,9 @@ public class MemberImplTest {
         assertFalse(partitionHostMember.hasRole(EXECUTOR));
         assertTrue(partitionHostMember.hasRole(PARTITION_HOST));
 
-        MemberImpl noRolMember = createMember(none());
-        assertFalse(noRolMember.hasRole(EXECUTOR));
-        assertFalse(noRolMember.hasRole(PARTITION_HOST));
+        MemberImpl noRoleMember = createMember(none());
+        assertFalse(noRoleMember.hasRole(EXECUTOR));
+        assertFalse(noRoleMember.hasRole(PARTITION_HOST));
     }
 
     private MemberImpl createMember(MemberRole role) throws Exception {

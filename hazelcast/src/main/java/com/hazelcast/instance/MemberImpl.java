@@ -454,16 +454,33 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         return true;
     }
 
+    /**
+     * Defines the different roles a member can have in the cluster
+     * A member with no roles should be able to will have access read and write data to the cluster
+     */
     public static enum MemberRole {
+        /**
+         * The EXECUTOR role allows a member receive application tasks
+         * that have been scheduled for execution in the cluster
+         */
         EXECUTOR,
+        /**
+         * The PARTITION_HOST role makes a member eligible to host data partitions / replicas
+         */
         PARTITION_HOST;
 
+        /**
+         * @return a set of all the roles a member may have in the cluster.
+         */
         public static Set<MemberRole> all() {
             Set<MemberRole> roles = new HashSet<MemberRole>();
-            Collections.addAll(roles, PARTITION_HOST, EXECUTOR);
+            Collections.addAll(roles, MemberRole.values());
             return roles;
         }
 
+        /**
+         * @return an empty set of roles for members which only need to be able to read / write data.
+         */
         public static Set<MemberRole> none() {
             return new HashSet<MemberRole>();
         }
