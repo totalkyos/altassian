@@ -62,6 +62,7 @@ import com.hazelcast.core.MultiMap;
 import com.hazelcast.core.PartitionService;
 import com.hazelcast.core.ReplicatedMap;
 import com.hazelcast.executor.impl.DistributedExecutorService;
+import com.hazelcast.instance.MemberImpl;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
 import com.hazelcast.logging.LoggingService;
@@ -84,11 +85,14 @@ import com.hazelcast.util.ServiceLoader;
 
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
+
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 public class HazelcastClientInstanceImpl implements HazelcastInstance {
 
@@ -262,6 +266,11 @@ public class HazelcastClientInstanceImpl implements HazelcastInstance {
     @Override
     public ILock getLock(String key) {
         return getDistributedObject(LockServiceImpl.SERVICE_NAME, key);
+    }
+
+    @Override
+    public void updateRoles(Set<MemberRole> roles) {
+        throw new UnsupportedOperationException("Client instances cannot change their rol in the cluster");
     }
 
     @Override

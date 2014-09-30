@@ -24,22 +24,29 @@ import com.hazelcast.security.Credentials;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 public class JoinRequest extends JoinMessage implements DataSerializable {
 
     private Credentials credentials;
     private int tryCount;
     private Map<String, Object> attributes;
+    private Set<MemberRole> roles;
 
     public JoinRequest() {
     }
 
     public JoinRequest(byte packetVersion, int buildNumber, Address address, String uuid, ConfigCheck config,
-                       Credentials credentials, int memberCount, int tryCount, Map<String, Object> attributes) {
+                       Credentials credentials, int memberCount, int tryCount, Set<MemberRole> roles,
+                       Map<String, Object> attributes) {
         super(packetVersion, buildNumber, address, uuid, config, memberCount);
         this.credentials = credentials;
         this.tryCount = tryCount;
+        this.roles = roles;
         this.attributes = attributes;
     }
 
@@ -59,6 +66,10 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
         return attributes;
     }
 
+    public Set<MemberRole> getRoles() {
+        return roles;
+    }
+
     @Override
     public void readData(ObjectDataInput in) throws IOException {
         super.readData(in);
@@ -67,7 +78,14 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
             credentials.setEndpoint(getAddress().getHost());
         }
         tryCount = in.readInt();
+
         int size = in.readInt();
+        roles = new HashSet<MemberRole>();
+        for (int i = 0; i < size; i++) {
+            roles.add(MemberRole.valueOf(in.readUTF()));
+        }
+
+        size = in.readInt();
         attributes = new HashMap<String, Object>();
         for (int i = 0; i < size; i++) {
             String key = in.readUTF();
@@ -81,6 +99,12 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
         super.writeData(out);
         out.writeObject(credentials);
         out.writeInt(tryCount);
+
+        out.writeInt(roles.size());
+        for (MemberRole role : roles) {
+            out.writeUTF(role.name());
+        }
+
         out.writeInt(attributes.size());
         for (Map.Entry<String, Object> entry : attributes.entrySet()) {
             out.writeUTF(entry.getKey());

@@ -52,18 +52,7 @@ import com.hazelcast.nio.Connection;
 import com.hazelcast.nio.ConnectionListener;
 import com.hazelcast.nio.Packet;
 import com.hazelcast.security.Credentials;
-import com.hazelcast.spi.EventPublishingService;
-import com.hazelcast.spi.EventRegistration;
-import com.hazelcast.spi.EventService;
-import com.hazelcast.spi.ExecutionService;
-import com.hazelcast.spi.ManagedService;
-import com.hazelcast.spi.MemberAttributeServiceEvent;
-import com.hazelcast.spi.MembershipAwareService;
-import com.hazelcast.spi.MembershipServiceEvent;
-import com.hazelcast.spi.NodeEngine;
-import com.hazelcast.spi.Operation;
-import com.hazelcast.spi.OperationService;
-import com.hazelcast.spi.SplitBrainHandlerService;
+import com.hazelcast.spi.*;
 import com.hazelcast.spi.impl.NodeEngineImpl;
 import com.hazelcast.util.Clock;
 import com.hazelcast.util.EmptyStatement;
@@ -73,24 +62,8 @@ import com.hazelcast.util.executor.ExecutorType;
 import javax.security.auth.login.LoginContext;
 import javax.security.auth.login.LoginException;
 import java.net.ConnectException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
@@ -99,9 +72,9 @@ import java.util.logging.Level;
 
 import static com.hazelcast.core.LifecycleEvent.LifecycleState.MERGED;
 import static com.hazelcast.core.LifecycleEvent.LifecycleState.MERGING;
-import static com.hazelcast.util.FutureUtil.ExceptionHandler;
-import static com.hazelcast.util.FutureUtil.logAllExceptions;
-import static com.hazelcast.util.FutureUtil.waitWithDeadline;
+import static com.hazelcast.instance.MemberImpl.MemberRole;
+import static com.hazelcast.instance.MemberImpl.MemberRole.PARTITION_HOST;
+import static com.hazelcast.util.FutureUtil.*;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Collections.unmodifiableSet;
 
@@ -584,7 +557,7 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
             }
 
             MemberInfo memberInfo = new MemberInfo(joinRequest.getAddress(), joinRequest.getUuid(),
-                    joinRequest.getAttributes());
+                    joinRequest.getRoles(), joinRequest.getAttributes());
 
             if (!setJoins.contains(memberInfo)) {
                 try {
@@ -745,9 +718,9 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
             if (currentMaster == null || currentMaster.equals(masterAddress)) {
                 setMasterAndJoin(masterAddress);
             } else if (currentMaster.equals(callerAddress)) {
-                    logger.info("Setting master to: " + masterAddress + ", since "
-                            + currentMaster + " says it's not master anymore.");
-                    setMasterAndJoin(masterAddress);
+                logger.info("Setting master to: " + masterAddress + ", since "
+                    + currentMaster + " says it's not master anymore.");
+                setMasterAndJoin(masterAddress);
             } else {
                 final Connection conn = node.connectionManager.getConnection(currentMaster);
                 if (conn != null && conn.isAlive()) {
@@ -960,7 +933,7 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
                 MemberImpl member = oldMemberMap.get(memberInfo.getAddress());
                 if (member == null) {
                     member = createMember(memberInfo.getAddress(), memberInfo.getUuid(),
-                            thisAddress.getScopeId(), memberInfo.getAttributes());
+                            thisAddress.getScopeId(), memberInfo.getRoles(), memberInfo.getAttributes());
                 }
                 newMembers[k++] = member;
                 member.didRead();
@@ -988,6 +961,30 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
                         member.updateAttribute(operationType, key, value);
                     }
                     sendMemberAttributeEvent(member, operationType, key, value);
+                    break;
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void updateMemberRoles(String uuid, Set<MemberRole> roles) {
+        lock.lock();
+        try {
+            Map<Address, MemberImpl> memberMap = membersMapRef.get();
+            for (MemberImpl member : memberMap.values()) {
+                if (member.getUuid().equals(uuid)) {
+                    boolean wasPartitionHost = member.hasRole(PARTITION_HOST);
+
+                    if (member.setRoles(roles) && node.isMaster()) {
+                        // If node has been added or removed as a partition host then trigger re-partitioning
+                        if (!wasPartitionHost && member.hasRole(PARTITION_HOST)) {
+                            node.getPartitionService().memberAdded(member);
+                        } else if (wasPartitionHost && !member.hasRole(PARTITION_HOST)) {
+                            node.getPartitionService().memberRemoved(member);
+                        }
+                    }
                     break;
                 }
             }
@@ -1170,10 +1167,12 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
         }
     }
 
-    protected MemberImpl createMember(Address address, String nodeUuid, String ipV6ScopeId, Map<String, Object> attributes) {
+    protected MemberImpl createMember(Address address, String nodeUuid, String ipV6ScopeId, Set<MemberRole> roles,
+                                      Map<String, Object> attributes) {
+
         address.setScopeId(ipV6ScopeId);
         return new MemberImpl(address, thisAddress.equals(address), nodeUuid,
-                (HazelcastInstanceImpl) nodeEngine.getHazelcastInstance(), attributes);
+                (HazelcastInstanceImpl) nodeEngine.getHazelcastInstance(), roles, attributes);
     }
 
     @Override
@@ -1213,6 +1212,18 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
     @Override
     public Collection<MemberImpl> getMemberList() {
         return membersRef.get();
+    }
+
+    public Collection<MemberImpl> getMemberList(MemberRole filter) {
+        Collection<MemberImpl> memberList = getMemberList();
+        Collection<MemberImpl> filtered = new ArrayList<MemberImpl>(memberList.size());
+        for (MemberImpl member : memberList) {
+            if (member.hasRole(filter)) {
+                filtered.add(member);
+            }
+        }
+
+        return filtered;
     }
 
     @Override

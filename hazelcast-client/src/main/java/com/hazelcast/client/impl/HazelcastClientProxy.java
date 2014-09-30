@@ -19,29 +19,7 @@ package com.hazelcast.client.impl;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.config.Config;
-import com.hazelcast.core.Client;
-import com.hazelcast.core.ClientService;
-import com.hazelcast.core.Cluster;
-import com.hazelcast.core.DistributedObject;
-import com.hazelcast.core.DistributedObjectListener;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.HazelcastInstanceNotActiveException;
-import com.hazelcast.core.IAtomicLong;
-import com.hazelcast.core.IAtomicReference;
-import com.hazelcast.core.ICountDownLatch;
-import com.hazelcast.core.IExecutorService;
-import com.hazelcast.core.IList;
-import com.hazelcast.core.ILock;
-import com.hazelcast.core.IMap;
-import com.hazelcast.core.IQueue;
-import com.hazelcast.core.ISemaphore;
-import com.hazelcast.core.ISet;
-import com.hazelcast.core.ITopic;
-import com.hazelcast.core.IdGenerator;
-import com.hazelcast.core.LifecycleService;
-import com.hazelcast.core.MultiMap;
-import com.hazelcast.core.PartitionService;
-import com.hazelcast.core.ReplicatedMap;
+import com.hazelcast.core.*;
 import com.hazelcast.instance.TerminatedLifecycleService;
 import com.hazelcast.logging.LoggingService;
 import com.hazelcast.mapreduce.JobTracker;
@@ -52,8 +30,10 @@ import com.hazelcast.transaction.TransactionOptions;
 import com.hazelcast.transaction.TransactionalTask;
 
 import java.util.Collection;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 /**
  * A client-side proxy {@link com.hazelcast.core.HazelcastInstance} instance.
  *
@@ -119,6 +99,11 @@ public final class HazelcastClientProxy implements HazelcastInstance {
     @Override
     public ILock getLock(Object key) {
         return getClient().getLock(key);
+    }
+
+    @Override
+    public void updateRoles(Set<MemberRole> roles) {
+        getClient().updateRoles(roles);
     }
 
     @Override

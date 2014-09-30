@@ -25,7 +25,10 @@ import com.hazelcast.transaction.TransactionOptions;
 import com.hazelcast.transaction.TransactionalTask;
 
 import java.util.Collection;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
+
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 /**
  * Hazelcast instance. Each Hazelcast instance is a member (node) in a cluster.
@@ -142,6 +145,13 @@ public interface HazelcastInstance {
      */
     @Deprecated
     ILock getLock(Object key);
+
+    /**
+     * Update this instance's roles in the cluster
+     *
+     *  @param roles The new roles for this instance in the cluster.
+     */
+    void updateRoles(Set<MemberRole> roles);
 
     /**
      * Returns the Cluster that this Hazelcast instance is part of.

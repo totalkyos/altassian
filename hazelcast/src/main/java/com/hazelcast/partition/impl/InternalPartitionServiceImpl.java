@@ -18,7 +18,6 @@ package com.hazelcast.partition.impl;
 
 import com.hazelcast.cluster.MemberInfo;
 import com.hazelcast.core.HazelcastException;
-import com.hazelcast.core.Member;
 import com.hazelcast.core.MigrationEvent;
 import com.hazelcast.core.MigrationListener;
 import com.hazelcast.instance.MemberImpl;
@@ -28,13 +27,7 @@ import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.serialization.Data;
-import com.hazelcast.partition.InternalPartition;
-import com.hazelcast.partition.InternalPartitionService;
-import com.hazelcast.partition.MigrationEndpoint;
-import com.hazelcast.partition.MigrationInfo;
-import com.hazelcast.partition.PartitionInfo;
-import com.hazelcast.partition.PartitionRuntimeState;
-import com.hazelcast.partition.PartitionServiceProxy;
+import com.hazelcast.partition.*;
 import com.hazelcast.partition.membergroup.MemberGroup;
 import com.hazelcast.partition.membergroup.MemberGroupFactory;
 import com.hazelcast.partition.membergroup.MemberGroupFactoryFactory;
@@ -87,9 +80,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
 import static com.hazelcast.core.MigrationEvent.MigrationStatus;
-import static com.hazelcast.util.FutureUtil.ExceptionHandler;
-import static com.hazelcast.util.FutureUtil.logAllExceptions;
-import static com.hazelcast.util.FutureUtil.waitWithDeadline;
+import static com.hazelcast.instance.MemberImpl.MemberRole.PARTITION_HOST;
+import static com.hazelcast.util.FutureUtil.*;
 
 /**
  * The {@link InternalPartitionService} implementation.
@@ -279,8 +271,8 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                     return;
                 }
                 PartitionStateGenerator psg = partitionStateGenerator;
-                final Set<Member> members = node.getClusterService().getMembers();
-                Collection<MemberGroup> memberGroups = memberGroupFactory.createMemberGroups(members);
+                Collection<MemberGroup> memberGroups =
+                        memberGroupFactory.createMemberGroups(node.getClusterService().getMemberList());
                 if (memberGroups.isEmpty()) {
                     logger.warning("No member group is available to assign partition ownership...");
                     return;
@@ -307,8 +299,8 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
     }
 
     private void updateMemberGroupsSize() {
-        Set<Member> members = node.getClusterService().getMembers();
-        final Collection<MemberGroup> groups = memberGroupFactory.createMemberGroups(members);
+        final Collection<MemberGroup> groups =
+                memberGroupFactory.createMemberGroups(node.getClusterService().getMemberList(PARTITION_HOST));
         int size = 0;
         for (MemberGroup group : groups) {
             if (group.size() > 0) {
@@ -461,7 +453,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         try {
             List<MemberInfo> memberInfos = new ArrayList<MemberInfo>(members.size());
             for (MemberImpl member : members) {
-                MemberInfo memberInfo = new MemberInfo(member.getAddress(), member.getUuid(), member.getAttributes());
+                MemberInfo memberInfo = new MemberInfo(member);
                 memberInfos.add(memberInfo);
             }
             ArrayList<MigrationInfo> migrationInfos = new ArrayList<MigrationInfo>(completedMigrations);
@@ -1525,7 +1517,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
 
                     migrationQueue.clear();
                     PartitionStateGenerator psg = partitionStateGenerator;
-                    Collection<MemberImpl> members = node.getClusterService().getMemberList();
+                    Collection<MemberImpl> members = node.getClusterService().getMemberList(PARTITION_HOST);
                     Collection<MemberGroup> memberGroups = memberGroupFactory.createMemberGroups(members);
                     Address[][] newState = psg.reArrange(memberGroups, partitions);
 

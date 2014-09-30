@@ -64,10 +64,12 @@ import java.nio.channels.ServerSocketChannel;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.hazelcast.instance.NodeShutdownHelper.shutdownNodeByFiringEvents;
+import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 public class Node {
 
@@ -148,7 +150,8 @@ public class Node {
         try {
             address = addressPicker.getPublicAddress();
             final Map<String, Object> memberAttributes = findMemberAttributes(config.getMemberAttributeConfig().asReadOnly());
-            localMember = new MemberImpl(address, true, UuidUtil.createMemberUuid(address), hazelcastInstance, memberAttributes);
+            localMember = new MemberImpl(address, true, UuidUtil.createMemberUuid(address), hazelcastInstance,
+                    config.getMemberRol(), memberAttributes);
             loggingService.setThisMember(localMember);
             logger = loggingService.getLogger(Node.class.getName());
             nodeExtension = NodeExtensionFactory.create(configClassLoader);
@@ -504,7 +507,11 @@ public class Node {
 
         return new JoinRequest(Packet.VERSION, buildInfo.getBuildNumber(), address,
                 localMember.getUuid(), createConfigCheck(), credentials, clusterService.getSize(), 0,
-                config.getMemberAttributeConfig().getAttributes());
+                localMember.getRoles(), config.getMemberAttributeConfig().getAttributes());
+    }
+
+    public void updateRoles(Set<MemberRole> roles) {
+        this.localMember.setRoles(roles);
     }
 
     public ConfigCheck createConfigCheck() {
