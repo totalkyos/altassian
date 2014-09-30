@@ -334,13 +334,13 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         if (!member.localMember()) {
             updateMemberGroupsSize();
         }
+
         if (node.isMaster() && node.isActive()) {
+            enqueueMigration();
+
             lock.lock();
             try {
-                migrationQueue.clear();
                 if (initialized) {
-                    migrationQueue.add(new RepartitioningTask());
-
                     // send initial partition table to newly joined node.
                     Collection<MemberImpl> members = node.clusterService.getMemberList();
                     PartitionStateOperation op = new PartitionStateOperation(createPartitionState(members));
@@ -352,29 +352,24 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
     }
 
-    @Override
-    public void memberCapabilityUpdate(MemberImpl updatedMember) {
-        updateMemberGroupsSize();
-
-        lock.lock();
-        if (node.isMaster() && node.isActive()) {
-            try {
-                migrationQueue.clear();
-                if (!updatedMember.hasCapability(PARTITION_HOST) && !activeMigrations.isEmpty()) {
-                    for (MigrationInfo migrationInfo : activeMigrations.values()) {
-                        if (updatedMember.getAddress().equals(migrationInfo.getDestination())) {
-                            migrationInfo.invalidate();
+    private void enqueueMigration() {
+        GroupProperties groupProperties = node.getGroupProperties();
+        logger.info(String.format("Delaying repartitioning for [%d] seconds", groupProperties.PARTITION_MIGRATION_DELAY.getLong()));
+        nodeEngine.getExecutionService().schedule(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        lock.lock();
+                        try {
+                            migrationQueue.clear();
+                            if (initialized) {
+                                migrationQueue.add(new RepartitioningTask());
+                            }
+                        } finally {
+                            lock.unlock();
                         }
                     }
-                }
-
-                if (initialized) {
-                    migrationQueue.add(new RepartitioningTask());
-                }
-            } finally {
-                lock.unlock();
-            }
-        }
+                }, groupProperties.PARTITION_MIGRATION_DELAY.getLong(), TimeUnit.SECONDS);
     }
 
     public void memberRemoved(final MemberImpl member) {
