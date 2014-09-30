@@ -48,6 +48,8 @@ public interface OperationService {
 
     int getGenericOperationThreadCount();
 
+    int getResponseThreadCount();
+
     long getExecutedOperationCount();
 
     /**

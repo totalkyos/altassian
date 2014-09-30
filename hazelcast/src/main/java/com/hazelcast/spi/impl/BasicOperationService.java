@@ -161,6 +161,11 @@ final class BasicOperationService implements InternalOperationService {
     }
 
     @Override
+    public int getResponseThreadCount() {
+        return scheduler.getResponseThreadCount();
+    }
+
+    @Override
     public int getRunningOperationsCount() {
         return executingCalls.size();
     }
