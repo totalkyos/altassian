@@ -314,7 +314,7 @@ public final class HazelcastClient implements HazelcastInstance {
 
     @Override
     public void updateRoles(Set<MemberRole> roles) {
-        throw new UnsupportedOperationException("Client instances cannot change their rol in the cluster");
+        throw new UnsupportedOperationException("Client instances cannot change their role in the cluster");
     }
 
     @Override
