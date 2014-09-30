@@ -151,7 +151,7 @@ public class Node {
             address = addressPicker.getPublicAddress();
             final Map<String, Object> memberAttributes = findMemberAttributes(config.getMemberAttributeConfig().asReadOnly());
             localMember = new MemberImpl(address, true, UuidUtil.createMemberUuid(address), hazelcastInstance,
-                    config.getMemberRol(), memberAttributes);
+                    config.getMemberRole(), memberAttributes);
             loggingService.setThisMember(localMember);
             logger = loggingService.getLogger(Node.class.getName());
             nodeExtension = NodeExtensionFactory.create(configClassLoader);
