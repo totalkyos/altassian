@@ -181,6 +181,11 @@ final class BasicOperationService implements InternalOperationService {
     }
 
     @Override
+    public String getResponseStats() {
+        return responsePacketHandler.getResponseStats();
+    }
+
+    @Override
     public int getOperationExecutorQueueSize() {
         return scheduler.getOperationExecutorQueueSize();
     }
@@ -554,10 +559,51 @@ final class BasicOperationService implements InternalOperationService {
      * Responsible for handling responses.
      */
     private final class ResponsePacketHandler {
+        // Temporary members for diagnostic purposes - see STASHDEV-7788
+        private AtomicLong deserializationTime = new AtomicLong(0L);
+        private AtomicLong responsesProcessed = new AtomicLong(0L);
+        private AtomicLong worstDeserializationTime = new AtomicLong(0L);
+        private Response worstResponse = null;
+
+        public String getResponseStats() {
+            long responsesProcessedValue = responsesProcessed.longValue();
+            long deserializationTimeValue = deserializationTime.longValue();
+            long worstDeserializationTimeValue = worstDeserializationTime.longValue();
+
+            String result = "processed=" + responsesProcessedValue;
+            result += ", time=" + (deserializationTimeValue/1000000.0) + "ms";
+            result += ", worst=" + (worstDeserializationTimeValue/1000000.0) + "ms";
+            if (worstResponse != null) {
+                result += " - " + worstResponse.toString();
+            }
+            responsesProcessed.addAndGet(-responsesProcessedValue);
+            deserializationTime.addAndGet(-deserializationTimeValue);
+            if (worstDeserializationTime.compareAndSet(worstDeserializationTimeValue, 0L)) {
+                worstResponse = null;
+            }
+            return result;
+        }
+
         private void handle(Packet packet) {
             try {
+                // Temporary code for diagnostic purposes - see STASHDEV-7788
+                final long startTime = System.nanoTime();
+                // End temporary code
+
                 final Data data = packet.getData();
                 final Response response = (Response) nodeEngine.toObject(data);
+
+                // Temporary code for diagnostic purposes - see STASHDEV-7788
+                final long time = System.nanoTime() - startTime;
+                responsesProcessed.incrementAndGet();
+                deserializationTime.addAndGet(time);
+                long worstDeserializationTimeValue;
+                while ((worstDeserializationTimeValue = worstDeserializationTime.longValue()) < time) {
+                    if (worstDeserializationTime.compareAndSet(worstDeserializationTimeValue, time)) {
+                        worstResponse = response;
+                    }
+                }
+                // End temporary code
 
                 if (response instanceof NormalResponse) {
                     notifyRemoteCall((NormalResponse) response);
