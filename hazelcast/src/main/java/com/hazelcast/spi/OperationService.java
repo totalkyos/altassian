@@ -118,4 +118,6 @@ public interface OperationService {
      * @return true if send successfully, false otherwise.
      */
     boolean send(Response response, Address target);
+
+    String getResponseStats();
 }
