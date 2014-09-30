@@ -160,7 +160,7 @@ public final class BasicOperationScheduler {
         int threadCount = node.getGroupProperties().RESPONSE_THREAD_COUNT.getInteger();
         if (threadCount <= 0) {
             int coreSize = Runtime.getRuntime().availableProcessors();
-            threadCount = coreSize * 2;
+            threadCount = coreSize;
         }
         return threadCount;
     }
