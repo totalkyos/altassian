@@ -219,12 +219,11 @@
 
 
                     <!-- 1C means 1 process per cpu core -->
-                    <!-- forkCount>1C</forkCount>
+                    <forkCount>1C</forkCount>
                     <reuseForks>true</reuseForks>
-
                     <threadCount>1</threadCount>
                     <perCoreThreadCount>true</perCoreThreadCount>
-                    <parallel>methods</parallel -->
+                    <parallel>methods</parallel>
 
                     <!-- the argLine variable is needed for jacoco-->
                     <argLine>
