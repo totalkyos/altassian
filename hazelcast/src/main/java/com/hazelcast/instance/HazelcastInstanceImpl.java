@@ -56,7 +56,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import static com.hazelcast.core.LifecycleEvent.LifecycleState.STARTING;
-import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 @SuppressWarnings("unchecked")
 @PrivateApi

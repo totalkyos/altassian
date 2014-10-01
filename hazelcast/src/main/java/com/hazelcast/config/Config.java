@@ -18,6 +18,7 @@ package com.hazelcast.config;
 
 import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.ManagedContext;
+import com.hazelcast.instance.MemberRole;
 
 import java.io.File;
 import java.net.URL;
@@ -26,7 +27,6 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import static com.hazelcast.instance.MemberImpl.MemberRole;
 import static com.hazelcast.partition.strategy.StringPartitioningStrategy.getBaseName;
 import static java.text.MessageFormat.format;
 
@@ -99,7 +99,7 @@ public class Config {
 
     private String licenseKey;
 
-    private Set<MemberRole> memberRoles = MemberRole.all();
+    private Set<MemberRole> memberRoles = EnumSet.allOf(MemberRole.class);
 
     public Config() {
     }
@@ -173,12 +173,22 @@ public class Config {
         return this;
     }
 
+    /**
+     * Sets the initial set of Roles the Hazelcast instance should have in the cluster. These roles can later be
+     * updated using {@link com.hazelcast.core.HazelcastInstance#updateRoles(java.util.Set)}
+     * @param roles The roles to set in the instance.
+     * @return This config instance.
+     * @since 3.3-atlassian-1
+     */
     public Config setMemberRoles(Set<MemberRole> roles) {
         this.memberRoles = roles;
         return this;
     }
 
-    public Set<MemberRole> getMemberRole() {
+    /**
+     * @return the initial set of roles an instance should have when joining the cluster.
+     */
+    public Set<MemberRole> getMemberRoles() {
         return memberRoles;
     }
 

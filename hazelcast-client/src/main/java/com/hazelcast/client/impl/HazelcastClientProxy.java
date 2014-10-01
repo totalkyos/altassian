@@ -20,6 +20,7 @@ import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.config.Config;
 import com.hazelcast.core.*;
+import com.hazelcast.instance.MemberRole;
 import com.hazelcast.instance.TerminatedLifecycleService;
 import com.hazelcast.logging.LoggingService;
 import com.hazelcast.mapreduce.JobTracker;
@@ -33,7 +34,6 @@ import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
-import static com.hazelcast.instance.MemberImpl.MemberRole;
 /**
  * A client-side proxy {@link com.hazelcast.core.HazelcastInstance} instance.
  *

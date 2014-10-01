@@ -23,12 +23,12 @@ import com.hazelcast.nio.serialization.DataSerializable;
 import com.hazelcast.security.Credentials;
 
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import static com.hazelcast.instance.MemberImpl.MemberRole;
+import com.hazelcast.instance.MemberRole;
 
 public class JoinRequest extends JoinMessage implements DataSerializable {
 
@@ -80,13 +80,13 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
         tryCount = in.readInt();
 
         int size = in.readInt();
-        roles = new HashSet<MemberRole>();
+        roles = EnumSet.noneOf(MemberRole.class);
         for (int i = 0; i < size; i++) {
-            roles.add(MemberRole.valueOf(in.readUTF()));
+            roles.add(MemberRole.valueOf(in.readInt()));
         }
 
         size = in.readInt();
-        attributes = new HashMap<String, Object>();
+        attributes = new HashMap<String, Object>(size, 1.0f);
         for (int i = 0; i < size; i++) {
             String key = in.readUTF();
             Object value = in.readObject();
@@ -102,7 +102,7 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
 
         out.writeInt(roles.size());
         for (MemberRole role : roles) {
-            out.writeUTF(role.name());
+            out.writeInt(role.getId());
         }
 
         out.writeInt(attributes.size());

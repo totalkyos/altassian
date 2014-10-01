@@ -23,36 +23,36 @@ import com.hazelcast.nio.ObjectDataOutput;
 import com.hazelcast.nio.serialization.DataSerializable;
 
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import static com.hazelcast.instance.MemberImpl.MemberRole;
+import com.hazelcast.instance.MemberRole;
 
 public class MemberInfo implements DataSerializable {
     private Address address;
     private String uuid;
     private Map<String, Object> attributes;
-    private Set<MemberRole> roles = MemberRole.all();
+    private Set<MemberRole> roles;
 
     public MemberInfo() {
     }
 
     public MemberInfo(Address address) {
         this.address = address;
-    }
-
-    public MemberInfo(Address address, String uuid, Set<MemberRole> roles, Map<String, Object> attributes) {
-        super();
-        this.address = address;
-        this.uuid = uuid;
-        this.roles = roles;
-        this.attributes = new HashMap<String, Object>(attributes);
+        roles = EnumSet.allOf(MemberRole.class);
     }
 
     public MemberInfo(MemberImpl member) {
         this(member.getAddress(), member.getUuid(), member.getRoles(), member.getAttributes());
+    }
+
+    public MemberInfo(Address address, String uuid, Set<MemberRole> roles, Map<String, Object> attributes) {
+        this(address);
+        this.uuid = uuid;
+        this.roles = roles;
+        this.attributes = new HashMap<String, Object>(attributes);
     }
 
     public Address getAddress() {
@@ -79,11 +79,11 @@ public class MemberInfo implements DataSerializable {
             uuid = in.readUTF();
         }
 
-        roles = new HashSet<MemberRole>();
+        roles = EnumSet.noneOf(MemberRole.class);
 
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
-            roles.add(MemberRole.valueOf(in.readUTF()));
+            roles.add(MemberRole.valueOf(in.readInt()));
         }
 
         size = in.readInt();
@@ -108,7 +108,7 @@ public class MemberInfo implements DataSerializable {
 
         out.writeInt(roles.size());
         for (MemberRole role : roles) {
-            out.writeUTF(role.name());
+            out.writeInt(role.getId());
         }
 
         out.writeInt(attributes == null ? 0 : attributes.size());

@@ -17,6 +17,7 @@
 package com.hazelcast.core;
 
 import com.hazelcast.config.Config;
+import com.hazelcast.instance.MemberRole;
 import com.hazelcast.logging.LoggingService;
 import com.hazelcast.mapreduce.JobTracker;
 import com.hazelcast.transaction.TransactionContext;
@@ -27,8 +28,6 @@ import com.hazelcast.transaction.TransactionalTask;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
-
-import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 /**
  * Hazelcast instance. Each Hazelcast instance is a member (node) in a cluster.
@@ -150,6 +149,7 @@ public interface HazelcastInstance {
      * Update this instance's roles in the cluster
      *
      *  @param roles The new roles for this instance in the cluster.
+     *  @since 3.3-atlassian-1
      */
     void updateRoles(Set<MemberRole> roles);
 
