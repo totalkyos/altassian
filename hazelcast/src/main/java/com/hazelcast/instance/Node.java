@@ -140,7 +140,7 @@ public class Node {
             address = addressPicker.getPublicAddress();
             final Map<String, Object> memberAttributes = findMemberAttributes(config.getMemberAttributeConfig().asReadOnly());
             localMember = new MemberImpl(address, true, UuidUtil.createMemberUuid(address), hazelcastInstance,
-                    config.getMemberRole(), memberAttributes);
+                    config.getMemberRoles(), memberAttributes);
             loggingService.setThisMember(localMember);
             logger = loggingService.getLogger(Node.class.getName());
             initializer = NodeInitializerFactory.create(configClassLoader);

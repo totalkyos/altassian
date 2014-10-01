@@ -30,8 +30,6 @@ import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
-import static com.hazelcast.instance.MemberImpl.MemberRole;
-
 public final class HazelcastInstanceProxy implements HazelcastInstance {
 
     volatile HazelcastInstanceImpl original;
