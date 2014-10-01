@@ -47,7 +47,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
 import static com.hazelcast.core.MigrationEvent.MigrationStatus;
-import static com.hazelcast.instance.MemberImpl.MemberRole.PARTITION_HOST;
+import static com.hazelcast.instance.MemberRole.PARTITION_HOST;
 import static com.hazelcast.util.FutureUtil.*;
 
 public class InternalPartitionServiceImpl implements InternalPartitionService, ManagedService,

@@ -79,7 +79,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
-import static com.hazelcast.instance.MemberImpl.MemberRole;
+import com.hazelcast.instance.MemberRole;
 
 /**
  * Hazelcast Client enables you to do all Hazelcast operations without

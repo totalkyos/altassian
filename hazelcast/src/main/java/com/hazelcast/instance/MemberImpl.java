@@ -73,7 +73,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
 
     public MemberImpl(Address address, boolean localMember, String uuid, HazelcastInstanceImpl instance,
                       Map<String, Object> attributes) {
-        this(address, localMember, uuid, instance, MemberRole.all(), attributes);
+        this(address, localMember, uuid, instance, EnumSet.allOf(MemberRole.class), attributes);
     }
 
     public MemberImpl(Address address, boolean localMember, String uuid, HazelcastInstanceImpl instance,
@@ -84,7 +84,8 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         this.uuid = uuid;
         this.instance = instance;
 
-        this.roles = roles == null ? new HashSet<MemberRole>() : new HashSet<MemberRole>(roles);
+        this.roles = roles == null ? Collections.unmodifiableSet(EnumSet.noneOf(MemberRole.class)) :
+                Collections.unmodifiableSet(EnumSet.copyOf(roles));
 
         if (attributes != null) {
             this.attributes.putAll(attributes);
@@ -96,7 +97,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         this.address = member.address;
         this.lastRead = member.lastRead;
         this.uuid = member.uuid;
-        this.roles = new HashSet<MemberRole>(member.roles);
+        this.roles = EnumSet.copyOf(member.roles);
         this.attributes.putAll(member.attributes);
     }
 
@@ -125,7 +126,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
     }
 
     public Set<MemberRole> getRoles() {
-        return new HashSet<MemberRole>(roles);
+        return roles;
     }
 
     public boolean setRoles(Set<MemberRole> roles) {
@@ -133,7 +134,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
             return false;
         }
 
-        this.roles = new HashSet<MemberRole>(roles);
+        this.roles = EnumSet.copyOf(roles);
 
         if (localMember) {
             invokeOnAllMembers(new MemberRoleChangedOperation(uuid, roles));
@@ -365,9 +366,9 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         address.readData(in);
         uuid = in.readUTF();
         int size = in.readInt();
-        Set<MemberRole> roles = new HashSet<MemberRole>();
+        Set<MemberRole> roles = EnumSet.noneOf(MemberRole.class);
         for (int i = 0; i < size; i++) {
-            roles.add(MemberRole.valueOf(in.readUTF()));
+            roles.add(MemberRole.valueOf(in.readInt()));
         }
         this.roles = roles;
 
@@ -387,7 +388,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         Set<MemberRole> roles = getRoles();
         out.writeInt(roles.size());
         for (MemberRole role : roles) {
-            out.writeUTF(role.name());
+            out.writeInt(role.getId());
         }
 
         Map<String, Object> attributes = new HashMap<String, Object>(this.attributes);
@@ -454,35 +455,4 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         return true;
     }
 
-    /**
-     * Defines the different roles a member can have in the cluster
-     * A member with no roles should be able to will have access read and write data to the cluster
-     */
-    public static enum MemberRole {
-        /**
-         * The EXECUTOR role allows a member receive application tasks
-         * that have been scheduled for execution in the cluster
-         */
-        EXECUTOR,
-        /**
-         * The PARTITION_HOST role makes a member eligible to host data partitions / replicas
-         */
-        PARTITION_HOST;
-
-        /**
-         * @return a set of all the roles a member may have in the cluster.
-         */
-        public static Set<MemberRole> all() {
-            Set<MemberRole> roles = new HashSet<MemberRole>();
-            Collections.addAll(roles, MemberRole.values());
-            return roles;
-        }
-
-        /**
-         * @return an empty set of roles for members which only need to be able to read / write data.
-         */
-        public static Set<MemberRole> none() {
-            return new HashSet<MemberRole>();
-        }
-    }
 }

@@ -4,10 +4,10 @@ import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
 
 import java.io.IOException;
-import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.Set;
 
-import static com.hazelcast.instance.MemberImpl.MemberRole;
+import com.hazelcast.instance.MemberRole;
 
 public class MemberRoleChangedOperation extends AbstractClusterOperation {
 
@@ -34,7 +34,7 @@ public class MemberRoleChangedOperation extends AbstractClusterOperation {
         out.writeUTF(uuid);
         out.writeInt(roles.size());
         for (MemberRole role : roles) {
-            out.writeUTF(role.name());
+            out.writeInt(role.getId());
         }
     }
 
@@ -43,11 +43,11 @@ public class MemberRoleChangedOperation extends AbstractClusterOperation {
         super.readInternal(in);
         uuid = in.readUTF();
 
-        roles = new HashSet<MemberRole>();
+        roles = EnumSet.noneOf(MemberRole.class);
 
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
-            roles.add(MemberRole.valueOf(in.readUTF()));
+            roles.add(MemberRole.valueOf(in.readInt()));
         }
     }
 }

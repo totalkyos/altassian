@@ -56,8 +56,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.hazelcast.instance.MemberImpl.MemberRole;
-
 public class Node {
 
     private final ILogger logger;
@@ -139,7 +137,7 @@ public class Node {
             address = addressPicker.getPublicAddress();
             final Map<String, Object> memberAttributes = findMemberAttributes(config.getMemberAttributeConfig().asReadOnly());
             localMember = new MemberImpl(address, true, UuidUtil.createMemberUuid(address), hazelcastInstance,
-                    config.getMemberRole(), memberAttributes);
+                    config.getMemberRoles(), memberAttributes);
             loggingService.setThisMember(localMember);
             logger = loggingService.getLogger(Node.class.getName());
             initializer = NodeInitializerFactory.create(configClassLoader);
