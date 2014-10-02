@@ -796,13 +796,13 @@
 
     <distributionManagement>
         <repository>
-            <id>atlassian-3rdparty</id>
-            <url>https://maven.atlassian.com/3rdparty</url>
+            <id>release-repository</id>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
         </repository>
         <snapshotRepository>
-            <id>atlassian-3rdparty-snapshot</id>
+            <id>snapshot-repository</id>
             <name>Maven2 Snapshot Repository</name>
-            <url>https://maven.atlassian.com/3rdparty-snapshot</url>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
             <uniqueVersion>false</uniqueVersion>
         </snapshotRepository>
     </distributionManagement>
