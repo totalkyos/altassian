@@ -84,9 +84,9 @@
         </license>
     </licenses>
     <scm>
-        <connection>scm:git:git://github.com/hazelcast/hazelcast.git</connection>
-        <developerConnection>scm:git:git@github.com:hazelcast/hazelcast.git</developerConnection>
-        <url>https://github.com/hazelcast/hazelcast/</url>
+        <connection>scm:git:git://github.com/atlassian/hazelcast.git</connection>
+        <developerConnection>scm:git:https://github.com/atlassian/hazelcast.git</developerConnection>
+        <url>https://github.com/atlassian/hazelcast/</url>
     </scm>
     <developers>
         <developer>
@@ -765,12 +765,12 @@
     <distributionManagement>
         <repository>
             <id>release-repository</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
+            <url>https://maven.atlassian.com/private</url>
         </repository>
         <snapshotRepository>
             <id>snapshot-repository</id>
             <name>Maven2 Snapshot Repository</name>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <url>https://maven.atlassian.com/private-snapshot</url>
             <uniqueVersion>false</uniqueVersion>
         </snapshotRepository>
     </distributionManagement>
