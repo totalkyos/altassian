@@ -16,6 +16,7 @@
 
 package com.hazelcast.cluster;
 
+import com.hazelcast.instance.MemberRole;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
@@ -23,12 +24,9 @@ import com.hazelcast.nio.serialization.DataSerializable;
 import com.hazelcast.security.Credentials;
 
 import java.io.IOException;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-
-import com.hazelcast.instance.MemberRole;
 
 public class JoinRequest extends JoinMessage implements DataSerializable {
 
@@ -79,13 +77,9 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
         }
         tryCount = in.readInt();
 
-        int size = in.readInt();
-        roles = EnumSet.noneOf(MemberRole.class);
-        for (int i = 0; i < size; i++) {
-            roles.add(MemberRole.valueOf(in.readInt()));
-        }
+        roles = MemberRole.readRoles(in);
 
-        size = in.readInt();
+        int size = in.readInt();
         attributes = new HashMap<String, Object>(size, 1.0f);
         for (int i = 0; i < size; i++) {
             String key = in.readUTF();
@@ -100,10 +94,7 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
         out.writeObject(credentials);
         out.writeInt(tryCount);
 
-        out.writeInt(roles.size());
-        for (MemberRole role : roles) {
-            out.writeInt(role.getId());
-        }
+        MemberRole.writeRoles(out, roles);
 
         out.writeInt(attributes.size());
         for (Map.Entry<String, Object> entry : attributes.entrySet()) {
