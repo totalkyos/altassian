@@ -19,9 +19,26 @@ package com.hazelcast.instance;
 import com.hazelcast.ascii.TextCommandService;
 import com.hazelcast.ascii.TextCommandServiceImpl;
 import com.hazelcast.client.impl.ClientEngineImpl;
-import com.hazelcast.cluster.*;
-import com.hazelcast.config.*;
-import com.hazelcast.core.*;
+import com.hazelcast.cluster.ClusterServiceImpl;
+import com.hazelcast.cluster.ConfigCheck;
+import com.hazelcast.cluster.JoinRequest;
+import com.hazelcast.cluster.Joiner;
+import com.hazelcast.cluster.MulticastJoiner;
+import com.hazelcast.cluster.MulticastService;
+import com.hazelcast.cluster.NodeMulticastListener;
+import com.hazelcast.cluster.TcpIpJoiner;
+import com.hazelcast.config.Config;
+import com.hazelcast.config.JoinConfig;
+import com.hazelcast.config.ListenerConfig;
+import com.hazelcast.config.MemberAttributeConfig;
+import com.hazelcast.config.MulticastConfig;
+import com.hazelcast.config.SerializationConfig;
+import com.hazelcast.core.DistributedObjectListener;
+import com.hazelcast.core.HazelcastInstanceAware;
+import com.hazelcast.core.LifecycleListener;
+import com.hazelcast.core.MembershipListener;
+import com.hazelcast.core.MigrationListener;
+import com.hazelcast.core.PartitioningStrategy;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.LoggingServiceImpl;
 import com.hazelcast.management.ManagementCenterService;
@@ -508,7 +525,7 @@ public class Node {
     }
 
     public void updateRoles(Set<MemberRole> roles) {
-        this.localMember.setRoles(roles);
+        this.clusterService.updateMemberRoles(localMember.getUuid(), roles);
     }
 
     public ConfigCheck createConfigCheck() {
