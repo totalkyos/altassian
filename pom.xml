@@ -764,13 +764,13 @@
 
     <distributionManagement>
         <repository>
-            <id>release-repository</id>
+            <id>atlassian-3rdparty</id>
             <url>https://maven.atlassian.com/3rdparty</url>
         </repository>
         <snapshotRepository>
-            <id>snapshot-repository</id>
+            <id>atlassian-3rdparty-snapshot</id>
             <name>Maven2 Snapshot Repository</name>
-            <url>https://maven.atlassian.com/private-snapshot</url>
+            <url>https://maven.atlassian.com/3rdparty-snapshot</url>
             <uniqueVersion>false</uniqueVersion>
         </snapshotRepository>
     </distributionManagement>
