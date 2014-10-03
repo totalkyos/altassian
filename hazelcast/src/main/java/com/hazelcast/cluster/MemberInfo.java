@@ -17,6 +17,7 @@
 package com.hazelcast.cluster;
 
 import com.hazelcast.instance.MemberImpl;
+import com.hazelcast.instance.MemberRole;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
@@ -27,8 +28,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-
-import com.hazelcast.instance.MemberRole;
 
 public class MemberInfo implements DataSerializable {
     private Address address;
@@ -81,12 +80,9 @@ public class MemberInfo implements DataSerializable {
 
         roles = EnumSet.noneOf(MemberRole.class);
 
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            roles.add(MemberRole.valueOf(in.readInt()));
-        }
+        roles = MemberRole.readRoles(in);
 
-        size = in.readInt();
+        int size = in.readInt();
         if (size > 0) {
             attributes = new HashMap<String, Object>();
         }
@@ -106,10 +102,7 @@ public class MemberInfo implements DataSerializable {
             out.writeUTF(uuid);
         }
 
-        out.writeInt(roles.size());
-        for (MemberRole role : roles) {
-            out.writeInt(role.getId());
-        }
+        MemberRole.writeRoles(out, roles);
 
         out.writeInt(attributes == null ? 0 : attributes.size());
         if (attributes != null) {

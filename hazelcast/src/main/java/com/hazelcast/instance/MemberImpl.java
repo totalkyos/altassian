@@ -364,14 +364,10 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         address = new Address();
         address.readData(in);
         uuid = in.readUTF();
-        int size = in.readInt();
-        Set<MemberRole> roles = EnumSet.noneOf(MemberRole.class);
-        for (int i = 0; i < size; i++) {
-            roles.add(MemberRole.valueOf(in.readInt()));
-        }
-        this.roles = roles;
 
-        size = in.readInt();
+        roles = MemberRole.readRoles(in);
+
+        int size = in.readInt();
         for (int i = 0; i < size; i++) {
             String key = in.readUTF();
             Object value = IOUtil.readAttributeValue(in);
@@ -384,11 +380,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         address.writeData(out);
         out.writeUTF(uuid);
 
-        Set<MemberRole> roles = getRoles();
-        out.writeInt(roles.size());
-        for (MemberRole role : roles) {
-            out.writeInt(role.getId());
-        }
+        MemberRole.writeRoles(out, getRoles());
 
         Map<String, Object> attributes = new HashMap<String, Object>(this.attributes);
         out.writeInt(attributes.size());
