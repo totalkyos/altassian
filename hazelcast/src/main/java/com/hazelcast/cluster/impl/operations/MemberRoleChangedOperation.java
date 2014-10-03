@@ -1,5 +1,6 @@
-package com.hazelcast.cluster;
+package com.hazelcast.cluster.impl.operations;
 
+import com.hazelcast.cluster.impl.ClusterServiceImpl;
 import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
 

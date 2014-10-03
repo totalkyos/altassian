@@ -44,6 +44,7 @@ import com.hazelcast.core.TransactionalMap;
 import com.hazelcast.core.TransactionalMultiMap;
 import com.hazelcast.core.TransactionalQueue;
 import com.hazelcast.core.TransactionalSet;
+import com.hazelcast.instance.MemberRole;
 import com.hazelcast.logging.LoggingService;
 import com.hazelcast.mapreduce.JobTracker;
 import com.hazelcast.transaction.TransactionContext;
@@ -59,6 +60,7 @@ import javax.resource.cci.ResultSetInfo;
 import javax.resource.spi.ConnectionEvent;
 import javax.security.auth.Subject;
 import java.util.Collection;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -315,6 +317,11 @@ public class HazelcastConnectionImpl implements HazelcastConnection {
     @Override
     public ILock getLock(Object key) {
         return getHazelcastInstance().getLock(key);
+    }
+
+    @Override
+    public void updateRoles(Set<MemberRole> roles) {
+        getHazelcastInstance().updateRoles(roles);
     }
 
     @Override

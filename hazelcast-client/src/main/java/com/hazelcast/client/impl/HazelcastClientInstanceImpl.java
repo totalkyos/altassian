@@ -62,7 +62,7 @@ import com.hazelcast.core.MultiMap;
 import com.hazelcast.core.PartitionService;
 import com.hazelcast.core.ReplicatedMap;
 import com.hazelcast.executor.impl.DistributedExecutorService;
-import com.hazelcast.instance.MemberImpl;
+import com.hazelcast.instance.MemberRole;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
 import com.hazelcast.logging.LoggingService;
@@ -91,8 +91,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
-
-import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 public class HazelcastClientInstanceImpl implements HazelcastInstance {
 

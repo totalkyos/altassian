@@ -19,7 +19,6 @@ package com.hazelcast.instance;
 import com.hazelcast.cluster.impl.ClusterDataSerializerHook;
 import com.hazelcast.cluster.impl.operations.MemberAttributeChangedOperation;
 import com.hazelcast.cluster.MemberAttributeOperationType;
-import com.hazelcast.cluster.MemberRoleChangedOperation;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.HazelcastInstanceAware;
 import com.hazelcast.core.Member;
@@ -39,7 +38,11 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.hazelcast.cluster.MemberAttributeOperationType.PUT;
@@ -135,10 +138,6 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         }
 
         this.roles = EnumSet.copyOf(roles);
-
-        if (localMember) {
-            invokeOnAllMembers(new MemberRoleChangedOperation(uuid, roles));
-        }
 
         return true;
     }

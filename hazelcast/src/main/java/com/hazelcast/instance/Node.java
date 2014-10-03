@@ -510,7 +510,7 @@ public class Node {
     }
 
     public void updateRoles(Set<MemberRole> roles) {
-        this.localMember.setRoles(roles);
+        this.clusterService.updateMemberRoles(localMember.getUuid(), roles);
     }
 
     public ConfigCheck createConfigCheck() {

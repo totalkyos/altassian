@@ -30,6 +30,7 @@ import com.hazelcast.cluster.impl.operations.MasterConfirmationOperation;
 import com.hazelcast.cluster.impl.operations.MasterDiscoveryOperation;
 import com.hazelcast.cluster.impl.operations.MemberInfoUpdateOperation;
 import com.hazelcast.cluster.impl.operations.MemberRemoveOperation;
+import com.hazelcast.cluster.impl.operations.MemberRoleChangedOperation;
 import com.hazelcast.cluster.impl.operations.PostJoinOperation;
 import com.hazelcast.cluster.impl.operations.SetMasterOperation;
 import com.hazelcast.core.Cluster;
@@ -45,6 +46,7 @@ import com.hazelcast.instance.BuildInfo;
 import com.hazelcast.instance.HazelcastInstanceImpl;
 import com.hazelcast.instance.LifecycleServiceImpl;
 import com.hazelcast.instance.MemberImpl;
+import com.hazelcast.instance.MemberRole;
 import com.hazelcast.instance.Node;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.nio.Address;
@@ -52,7 +54,18 @@ import com.hazelcast.nio.Connection;
 import com.hazelcast.nio.ConnectionListener;
 import com.hazelcast.nio.Packet;
 import com.hazelcast.security.Credentials;
-import com.hazelcast.spi.*;
+import com.hazelcast.spi.EventPublishingService;
+import com.hazelcast.spi.EventRegistration;
+import com.hazelcast.spi.EventService;
+import com.hazelcast.spi.ExecutionService;
+import com.hazelcast.spi.ManagedService;
+import com.hazelcast.spi.MemberAttributeServiceEvent;
+import com.hazelcast.spi.MembershipAwareService;
+import com.hazelcast.spi.MembershipServiceEvent;
+import com.hazelcast.spi.NodeEngine;
+import com.hazelcast.spi.Operation;
+import com.hazelcast.spi.OperationService;
+import com.hazelcast.spi.SplitBrainHandlerService;
 import com.hazelcast.spi.impl.NodeEngineImpl;
 import com.hazelcast.util.Clock;
 import com.hazelcast.util.EmptyStatement;
@@ -62,8 +75,24 @@ import com.hazelcast.util.executor.ExecutorType;
 import javax.security.auth.login.LoginContext;
 import javax.security.auth.login.LoginException;
 import java.net.ConnectException;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
@@ -72,10 +101,10 @@ import java.util.logging.Level;
 
 import static com.hazelcast.core.LifecycleEvent.LifecycleState.MERGED;
 import static com.hazelcast.core.LifecycleEvent.LifecycleState.MERGING;
-
-import com.hazelcast.instance.MemberRole;
 import static com.hazelcast.instance.MemberRole.PARTITION_HOST;
-import static com.hazelcast.util.FutureUtil.*;
+import static com.hazelcast.util.FutureUtil.ExceptionHandler;
+import static com.hazelcast.util.FutureUtil.logAllExceptions;
+import static com.hazelcast.util.FutureUtil.waitWithDeadline;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Collections.unmodifiableSet;
 
@@ -973,24 +1002,30 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
     public void updateMemberRoles(String uuid, Set<MemberRole> roles) {
         lock.lock();
         try {
-            Map<Address, MemberImpl> memberMap = membersMapRef.get();
-            for (MemberImpl member : memberMap.values()) {
-                if (member.getUuid().equals(uuid)) {
-                    boolean wasPartitionHost = member.hasRole(PARTITION_HOST);
-
-                    if (member.setRoles(roles) && node.isMaster()) {
-                        // If node has been added or removed as a partition host then trigger re-partitioning
-                        if (!wasPartitionHost && member.hasRole(PARTITION_HOST)) {
-                            node.getPartitionService().memberAdded(member);
-                        } else if (wasPartitionHost && !member.hasRole(PARTITION_HOST)) {
-                            node.getPartitionService().memberRemoved(member);
-                        }
+            MemberImpl member = getMember(uuid);
+            if (member != null) {
+                boolean wasPartitionHost = member.hasRole(PARTITION_HOST);
+                if (member.setRoles(roles) && node.isMaster()) {
+                    // If node has been added or removed as a partition host then trigger re-partitioning
+                    if (!wasPartitionHost && member.hasRole(PARTITION_HOST)) {
+                        node.getPartitionService().memberAdded(member);
+                    } else if (wasPartitionHost && !member.hasRole(PARTITION_HOST)) {
+                        node.getPartitionService().memberRemoved(member);
                     }
-                    break;
                 }
+
+                invokeOnOthers(new MemberRoleChangedOperation(uuid, roles));
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    private void invokeOnOthers(Operation operation) {
+        for (MemberImpl member : getMemberList()) {
+            if (!member.localMember()) {
+                invokeClusterOperation(operation, member.getAddress());
+            }
         }
     }
 
