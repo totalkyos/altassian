@@ -18,7 +18,7 @@ package com.hazelcast.config;
 
 import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.ManagedContext;
-import com.hazelcast.instance.MemberRole;
+import com.hazelcast.instance.Capability;
 
 import java.io.File;
 import java.net.URL;
@@ -106,7 +106,7 @@ public class Config {
 
     private String licenseKey;
 
-    private Set<MemberRole> memberRoles = EnumSet.allOf(MemberRole.class);
+    private Set<Capability> capabilities = EnumSet.allOf(Capability.class);
 
     public Config() {
     }
@@ -181,22 +181,22 @@ public class Config {
     }
 
     /**
-     * Sets the initial set of Roles the Hazelcast instance should have in the cluster. These roles can later be
-     * updated using {@link com.hazelcast.core.HazelcastInstance#updateRoles(java.util.Set)}
-     * @param roles The roles to set in the instance.
+     * Sets the initial capabilities the Hazelcast instance should have in the cluster. These capabilities can later be
+     * updated using {@link com.hazelcast.core.Member#updateCapabilities(java.util.Set)}
+     * @param capabilities The capabilities to set in the instance.
      * @return This config instance.
      * @since 3.3-atlassian-1
      */
-    public Config setMemberRoles(Set<MemberRole> roles) {
-        this.memberRoles = roles;
+    public Config setCapabilities(Set<Capability> capabilities) {
+        this.capabilities = capabilities;
         return this;
     }
 
     /**
-     * @return the initial set of roles an instance should have when joining the cluster.
+     * @return the initial set of capabilities an instance must have when joining the cluster.
      */
-    public Set<MemberRole> getMemberRoles() {
-        return memberRoles;
+    public Set<Capability> getCapabilities() {
+        return capabilities;
     }
 
     public GroupConfig getGroupConfig() {

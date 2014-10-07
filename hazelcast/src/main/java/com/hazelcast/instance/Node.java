@@ -64,7 +64,6 @@ import java.nio.channels.ServerSocketChannel;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -150,7 +149,7 @@ public class Node {
             address = addressPicker.getPublicAddress();
             final Map<String, Object> memberAttributes = findMemberAttributes(config.getMemberAttributeConfig().asReadOnly());
             localMember = new MemberImpl(address, true, UuidUtil.createMemberUuid(address), hazelcastInstance,
-                    config.getMemberRoles(), memberAttributes);
+                    config.getCapabilities(), memberAttributes);
             loggingService.setThisMember(localMember);
             logger = loggingService.getLogger(Node.class.getName());
             nodeExtension = NodeExtensionFactory.create(configClassLoader);
@@ -506,11 +505,7 @@ public class Node {
 
         return new JoinRequest(Packet.VERSION, buildInfo.getBuildNumber(), address,
                 localMember.getUuid(), createConfigCheck(), credentials, clusterService.getSize(), 0,
-                localMember.getRoles(), config.getMemberAttributeConfig().getAttributes());
-    }
-
-    public void updateRoles(Set<MemberRole> roles) {
-        this.clusterService.updateMemberRoles(localMember.getUuid(), roles);
+                localMember.getCapabilities(), config.getMemberAttributeConfig().getAttributes());
     }
 
     public ConfigCheck createConfigCheck() {

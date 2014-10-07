@@ -87,7 +87,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
 import static com.hazelcast.core.MigrationEvent.MigrationStatus;
-import static com.hazelcast.instance.MemberRole.PARTITION_HOST;
+import static com.hazelcast.instance.Capability.PARTITION_HOST;
 import static com.hazelcast.util.FutureUtil.ExceptionHandler;
 import static com.hazelcast.util.FutureUtil.logAllExceptions;
 import static com.hazelcast.util.FutureUtil.waitWithDeadline;
@@ -347,6 +347,31 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                     Collection<MemberImpl> members = node.clusterService.getMemberList();
                     PartitionStateOperation op = new PartitionStateOperation(createPartitionState(members));
                     nodeEngine.getOperationService().send(op, member.getAddress());
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    @Override
+    public void memberCapabilityUpdate(MemberImpl updatedMember) {
+        updateMemberGroupsSize();
+
+        lock.lock();
+        if (node.isMaster() && node.isActive()) {
+            try {
+                migrationQueue.clear();
+                if (!updatedMember.hasCapability(PARTITION_HOST) && !activeMigrations.isEmpty()) {
+                    for (MigrationInfo migrationInfo : activeMigrations.values()) {
+                        if (updatedMember.getAddress().equals(migrationInfo.getDestination())) {
+                            migrationInfo.invalidate();
+                        }
+                    }
+                }
+
+                if (initialized) {
+                    migrationQueue.add(new RepartitioningTask());
                 }
             } finally {
                 lock.unlock();

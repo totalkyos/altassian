@@ -16,8 +16,8 @@
 
 package com.hazelcast.cluster;
 
+import com.hazelcast.instance.Capability;
 import com.hazelcast.instance.MemberImpl;
-import com.hazelcast.instance.MemberRole;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
@@ -33,24 +33,24 @@ public class MemberInfo implements DataSerializable {
     private Address address;
     private String uuid;
     private Map<String, Object> attributes;
-    private Set<MemberRole> roles;
+    private Set<Capability> capabilities;
 
     public MemberInfo() {
     }
 
     public MemberInfo(Address address) {
         this.address = address;
-        roles = EnumSet.allOf(MemberRole.class);
+        capabilities = EnumSet.allOf(Capability.class);
     }
 
     public MemberInfo(MemberImpl member) {
-        this(member.getAddress(), member.getUuid(), member.getRoles(), member.getAttributes());
+        this(member.getAddress(), member.getUuid(), member.getCapabilities(), member.getAttributes());
     }
 
-    public MemberInfo(Address address, String uuid, Set<MemberRole> roles, Map<String, Object> attributes) {
+    public MemberInfo(Address address, String uuid, Set<Capability> capabilities, Map<String, Object> attributes) {
         this(address);
         this.uuid = uuid;
-        this.roles = roles;
+        this.capabilities = capabilities;
         this.attributes = new HashMap<String, Object>(attributes);
     }
 
@@ -66,8 +66,8 @@ public class MemberInfo implements DataSerializable {
         return attributes;
     }
 
-    public Set<MemberRole> getRoles() {
-        return roles;
+    public Set<Capability> getCapabilities() {
+        return capabilities;
     }
 
     @Override
@@ -78,9 +78,7 @@ public class MemberInfo implements DataSerializable {
             uuid = in.readUTF();
         }
 
-        roles = EnumSet.noneOf(MemberRole.class);
-
-        roles = MemberRole.readRoles(in);
+        capabilities = Capability.readCapabilities(in);
 
         int size = in.readInt();
         if (size > 0) {
@@ -102,7 +100,7 @@ public class MemberInfo implements DataSerializable {
             out.writeUTF(uuid);
         }
 
-        MemberRole.writeRoles(out, roles);
+        Capability.writeCapabilities(out, capabilities);
 
         out.writeInt(attributes == null ? 0 : attributes.size());
         if (attributes != null) {

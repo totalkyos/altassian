@@ -19,6 +19,7 @@ package com.hazelcast.cluster.impl;
 import com.hazelcast.cluster.ClusterService;
 import com.hazelcast.cluster.MemberAttributeOperationType;
 import com.hazelcast.cluster.MemberInfo;
+import com.hazelcast.cluster.impl.operations.MemberCapabilityUpdateException;
 import com.hazelcast.cluster.impl.operations.FinalizeJoinOperation;
 import com.hazelcast.cluster.impl.operations.JoinCheckOperation;
 import com.hazelcast.cluster.impl.operations.AuthenticationFailureOperation;
@@ -28,9 +29,9 @@ import com.hazelcast.cluster.impl.operations.HeartbeatOperation;
 import com.hazelcast.cluster.impl.operations.JoinRequestOperation;
 import com.hazelcast.cluster.impl.operations.MasterConfirmationOperation;
 import com.hazelcast.cluster.impl.operations.MasterDiscoveryOperation;
+import com.hazelcast.cluster.impl.operations.MemberCapabilityChangedOperation;
 import com.hazelcast.cluster.impl.operations.MemberInfoUpdateOperation;
 import com.hazelcast.cluster.impl.operations.MemberRemoveOperation;
-import com.hazelcast.cluster.impl.operations.MemberRoleChangedOperation;
 import com.hazelcast.cluster.impl.operations.PostJoinOperation;
 import com.hazelcast.cluster.impl.operations.SetMasterOperation;
 import com.hazelcast.core.Cluster;
@@ -43,10 +44,10 @@ import com.hazelcast.core.MemberAttributeEvent;
 import com.hazelcast.core.MembershipEvent;
 import com.hazelcast.core.MembershipListener;
 import com.hazelcast.instance.BuildInfo;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.instance.HazelcastInstanceImpl;
 import com.hazelcast.instance.LifecycleServiceImpl;
 import com.hazelcast.instance.MemberImpl;
-import com.hazelcast.instance.MemberRole;
 import com.hazelcast.instance.Node;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.nio.Address;
@@ -101,7 +102,7 @@ import java.util.logging.Level;
 
 import static com.hazelcast.core.LifecycleEvent.LifecycleState.MERGED;
 import static com.hazelcast.core.LifecycleEvent.LifecycleState.MERGING;
-import static com.hazelcast.instance.MemberRole.PARTITION_HOST;
+import static com.hazelcast.instance.Capability.PARTITION_HOST;
 import static com.hazelcast.util.FutureUtil.ExceptionHandler;
 import static com.hazelcast.util.FutureUtil.logAllExceptions;
 import static com.hazelcast.util.FutureUtil.waitWithDeadline;
@@ -587,7 +588,7 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
             }
 
             MemberInfo memberInfo = new MemberInfo(joinRequest.getAddress(), joinRequest.getUuid(),
-                    joinRequest.getRoles(), joinRequest.getAttributes());
+                    joinRequest.getCapabilities(), joinRequest.getAttributes());
 
             if (!setJoins.contains(memberInfo)) {
                 try {
@@ -963,7 +964,7 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
                 MemberImpl member = oldMemberMap.get(memberInfo.getAddress());
                 if (member == null) {
                     member = createMember(memberInfo.getAddress(), memberInfo.getUuid(),
-                            thisAddress.getScopeId(), memberInfo.getRoles(), memberInfo.getAttributes());
+                            thisAddress.getScopeId(), memberInfo.getCapabilities(), memberInfo.getAttributes());
                 }
                 newMembers[k++] = member;
                 member.didRead();
@@ -999,26 +1000,42 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
         }
     }
 
-    public void updateMemberRoles(String uuid, Set<MemberRole> roles) {
+    public void updateMemberCapabilities(String uuid, Set<Capability> newCapabilities) {
         lock.lock();
         try {
             MemberImpl member = getMember(uuid);
-            if (member != null) {
-                boolean wasPartitionHost = member.hasRole(PARTITION_HOST);
-                if (member.setRoles(roles) && node.isMaster()) {
-                    // If node has been added or removed as a partition host then trigger re-partitioning
-                    if (!wasPartitionHost && member.hasRole(PARTITION_HOST)) {
-                        node.getPartitionService().memberAdded(member);
-                    } else if (wasPartitionHost && !member.hasRole(PARTITION_HOST)) {
-                        node.getPartitionService().memberRemoved(member);
-                    }
-                }
+            if (member == null) {
+                throw new MemberCapabilityUpdateException(String.format("Could not find member [%s] to update capabilities", uuid));
+            }
 
-                invokeOnOthers(new MemberRoleChangedOperation(uuid, roles));
+            if (node.isMaster()) {
+                doMasterUpdate(member, newCapabilities);
+            } else {
+                member.setCapabilities(newCapabilities);
             }
         } finally {
             lock.unlock();
         }
+    }
+
+    private void doMasterUpdate(MemberImpl member, Set<Capability> newCapabilities) {
+        if (canUpdate(newCapabilities)) {
+            boolean wasPartitionHost = member.hasCapability(PARTITION_HOST);
+
+            if (member.setCapabilities(newCapabilities)) {
+                // If node has been added or removed as a partition host then trigger re-partitioning
+                if (wasPartitionHost != member.hasCapability(PARTITION_HOST)) {
+                    node.getPartitionService().memberCapabilityUpdate(member);
+                }
+
+                // Let other members know they should update their members
+                invokeOnOthers(new MemberCapabilityChangedOperation(member.getUuid(), newCapabilities));
+            }
+        }
+    }
+
+    private boolean canUpdate(Set<Capability> newCapabilities) {
+        return newCapabilities.contains(PARTITION_HOST) || getMemberList(PARTITION_HOST).size() > 1;
     }
 
     private void invokeOnOthers(Operation operation) {
@@ -1203,12 +1220,12 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
         }
     }
 
-    protected MemberImpl createMember(Address address, String nodeUuid, String ipV6ScopeId, Set<MemberRole> roles,
+    protected MemberImpl createMember(Address address, String nodeUuid, String ipV6ScopeId, Set<Capability> capabilities,
                                       Map<String, Object> attributes) {
 
         address.setScopeId(ipV6ScopeId);
         return new MemberImpl(address, thisAddress.equals(address), nodeUuid,
-                (HazelcastInstanceImpl) nodeEngine.getHazelcastInstance(), roles, attributes);
+                (HazelcastInstanceImpl) nodeEngine.getHazelcastInstance(), capabilities, attributes);
     }
 
     @Override
@@ -1250,11 +1267,11 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
         return membersRef.get();
     }
 
-    public Collection<MemberImpl> getMemberList(MemberRole filter) {
+    public Collection<MemberImpl> getMemberList(Capability filter) {
         Collection<MemberImpl> memberList = getMemberList();
         Collection<MemberImpl> filtered = new ArrayList<MemberImpl>(memberList.size());
         for (MemberImpl member : memberList) {
-            if (member.hasRole(filter)) {
+            if (member.hasCapability(filter)) {
                 filtered.add(member);
             }
         }

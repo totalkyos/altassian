@@ -18,7 +18,9 @@ package com.hazelcast.instance;
 
 import com.hazelcast.cluster.impl.ClusterDataSerializerHook;
 import com.hazelcast.cluster.impl.operations.MemberAttributeChangedOperation;
+import com.hazelcast.cluster.ClusterService;
 import com.hazelcast.cluster.MemberAttributeOperationType;
+import com.hazelcast.cluster.impl.operations.MemberCapabilityChangedOperation;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.HazelcastInstanceAware;
 import com.hazelcast.core.Member;
@@ -60,7 +62,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
     private volatile long lastWrite;
     private volatile long lastPing;
     private volatile ILogger logger;
-    private volatile Set<MemberRole> roles;
+    private volatile Set<Capability> capabilities;
 
     public MemberImpl() {
         this(null, false);
@@ -76,19 +78,19 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
 
     public MemberImpl(Address address, boolean localMember, String uuid, HazelcastInstanceImpl instance,
                       Map<String, Object> attributes) {
-        this(address, localMember, uuid, instance, EnumSet.allOf(MemberRole.class), attributes);
+        this(address, localMember, uuid, instance, EnumSet.allOf(Capability.class), attributes);
     }
 
     public MemberImpl(Address address, boolean localMember, String uuid, HazelcastInstanceImpl instance,
-                      Set<MemberRole> roles, Map<String, Object> attributes) {
+                      Set<Capability> capabilities, Map<String, Object> attributes) {
         this.localMember = localMember;
         this.address = address;
         this.lastRead = Clock.currentTimeMillis();
         this.uuid = uuid;
         this.instance = instance;
 
-        this.roles = roles == null ? Collections.unmodifiableSet(EnumSet.noneOf(MemberRole.class)) :
-                Collections.unmodifiableSet(EnumSet.copyOf(roles));
+        this.capabilities = capabilities == null ? Collections.unmodifiableSet(EnumSet.noneOf(Capability.class)) :
+                Collections.unmodifiableSet(EnumSet.copyOf(capabilities));
 
         if (attributes != null) {
             this.attributes.putAll(attributes);
@@ -100,7 +102,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         this.address = member.address;
         this.lastRead = member.lastRead;
         this.uuid = member.uuid;
-        this.roles = EnumSet.copyOf(member.roles);
+        this.capabilities = EnumSet.copyOf(member.capabilities);
         this.attributes.putAll(member.attributes);
     }
 
@@ -128,18 +130,23 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         return getSocketAddress();
     }
 
-    public Set<MemberRole> getRoles() {
-        return roles;
+    public Set<Capability> getCapabilities() {
+        return capabilities;
     }
 
-    public boolean setRoles(Set<MemberRole> roles) {
-        if (this.roles.equals(roles)) {
+    public boolean setCapabilities(Set<Capability> capabilities) {
+        if (this.capabilities.equals(capabilities)) {
             return false;
         }
 
-        this.roles = EnumSet.copyOf(roles);
+        this.capabilities = EnumSet.copyOf(capabilities);
 
         return true;
+    }
+
+    @Override
+    public void updateCapabilities(Set<Capability> capabilities) {
+        invokeOnMaster(new MemberCapabilityChangedOperation(getUuid(), capabilities));
     }
 
     @Override
@@ -342,21 +349,38 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
     }
 
     private void invokeOnAllMembers(Operation operation) {
+        for (MemberImpl member : getClusterService().getMemberList()) {
+            invokeOn(operation, member);
+        }
+    }
+
+    private void invokeOn(Operation operation, MemberImpl member) {
         NodeEngineImpl nodeEngine = instance.node.nodeEngine;
         OperationService os = nodeEngine.getOperationService();
         String uuid = nodeEngine.getLocalMember().getUuid();
         operation.setCallerUuid(uuid).setNodeEngine(nodeEngine);
         try {
-            for (MemberImpl member : nodeEngine.getClusterService().getMemberList()) {
-                if (!member.localMember()) {
-                    os.send(operation, member.getAddress());
-                } else {
-                    os.executeOperation(operation);
-                }
+            if (member.localMember()) {
+                os.executeOperation(operation);
+            } else {
+                os.send(operation, member.getAddress());
             }
         } catch (Throwable t) {
             throw ExceptionUtil.rethrow(t);
         }
+    }
+
+    private void invokeOnMaster(Operation operation) {
+        MemberImpl masterMember = getClusterService().getMember(getNode().getMasterAddress());
+        invokeOn(operation, masterMember);
+    }
+
+    private ClusterService getClusterService() {
+        return getNode().clusterService;
+    }
+
+    private Node getNode() {
+        return instance.node;
     }
 
     @Override
@@ -365,7 +389,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         address.readData(in);
         uuid = in.readUTF();
 
-        roles = MemberRole.readRoles(in);
+        capabilities = Capability.readCapabilities(in);
 
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
@@ -380,7 +404,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         address.writeData(out);
         out.writeUTF(uuid);
 
-        MemberRole.writeRoles(out, getRoles());
+        Capability.writeCapabilities(out, getCapabilities());
 
         Map<String, Object> attributes = new HashMap<String, Object>(this.attributes);
         out.writeInt(attributes.size());
@@ -399,8 +423,8 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
         return ClusterDataSerializerHook.MEMBER;
     }
 
-    public boolean hasRole(MemberRole role) {
-        return roles.contains(role);
+    public boolean hasCapability(Capability capability) {
+        return capabilities.contains(capability);
     }
 
     @Override

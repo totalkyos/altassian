@@ -44,7 +44,6 @@ import com.hazelcast.core.TransactionalMap;
 import com.hazelcast.core.TransactionalMultiMap;
 import com.hazelcast.core.TransactionalQueue;
 import com.hazelcast.core.TransactionalSet;
-import com.hazelcast.instance.MemberRole;
 import com.hazelcast.logging.LoggingService;
 import com.hazelcast.mapreduce.JobTracker;
 import com.hazelcast.transaction.TransactionContext;
@@ -317,11 +316,6 @@ public class HazelcastConnectionImpl implements HazelcastConnection {
     @Override
     public ILock getLock(Object key) {
         return getHazelcastInstance().getLock(key);
-    }
-
-    @Override
-    public void updateRoles(Set<MemberRole> roles) {
-        getHazelcastInstance().updateRoles(roles);
     }
 
     @Override

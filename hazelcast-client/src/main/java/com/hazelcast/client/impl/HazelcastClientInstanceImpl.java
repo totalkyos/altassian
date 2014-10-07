@@ -62,7 +62,7 @@ import com.hazelcast.core.MultiMap;
 import com.hazelcast.core.PartitionService;
 import com.hazelcast.core.ReplicatedMap;
 import com.hazelcast.executor.impl.DistributedExecutorService;
-import com.hazelcast.instance.MemberRole;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
 import com.hazelcast.logging.LoggingService;
@@ -264,11 +264,6 @@ public class HazelcastClientInstanceImpl implements HazelcastInstance {
     @Override
     public ILock getLock(String key) {
         return getDistributedObject(LockServiceImpl.SERVICE_NAME, key);
-    }
-
-    @Override
-    public void updateRoles(Set<MemberRole> roles) {
-        throw new UnsupportedOperationException("Client instances cannot change their rol in the cluster");
     }
 
     @Override
