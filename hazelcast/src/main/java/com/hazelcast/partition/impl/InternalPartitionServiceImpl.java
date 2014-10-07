@@ -38,7 +38,6 @@ import com.hazelcast.partition.membergroup.MemberGroup;
 import com.hazelcast.partition.membergroup.MemberGroupFactory;
 import com.hazelcast.partition.membergroup.MemberGroupFactoryFactory;
 import com.hazelcast.spi.Callback;
-import com.hazelcast.util.scheduler.CoalescingDelayedTrigger;
 import com.hazelcast.spi.EventPublishingService;
 import com.hazelcast.spi.EventRegistration;
 import com.hazelcast.spi.EventService;
@@ -52,6 +51,7 @@ import com.hazelcast.spi.ResponseHandler;
 import com.hazelcast.spi.impl.NodeEngineImpl;
 import com.hazelcast.spi.impl.ResponseHandlerFactory;
 import com.hazelcast.util.Clock;
+import com.hazelcast.util.scheduler.CoalescingDelayedTrigger;
 import com.hazelcast.util.scheduler.EntryTaskScheduler;
 import com.hazelcast.util.scheduler.EntryTaskSchedulerFactory;
 import com.hazelcast.util.scheduler.ScheduleType;
@@ -77,7 +77,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -280,8 +280,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                     return;
                 }
                 PartitionStateGenerator psg = partitionStateGenerator;
-                Collection<MemberGroup> memberGroups =
-                        memberGroupFactory.createMemberGroups(node.getClusterService().getMemberList());
+                Collection<MemberGroup> memberGroups = memberGroupFactory.createMemberGroups(getPartitionHosts());
                 if (memberGroups.isEmpty()) {
                     logger.warning("No member group is available to assign partition ownership...");
                     return;
@@ -308,8 +307,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
     }
 
     private void updateMemberGroupsSize() {
-        final Collection<MemberGroup> groups =
-                memberGroupFactory.createMemberGroups(node.getClusterService().getMemberList(PARTITION_HOST));
+        final Collection<MemberGroup> groups = memberGroupFactory.createMemberGroups(getPartitionHosts());
         int size = 0;
         for (MemberGroup group : groups) {
             if (group.size() > 0) {
@@ -555,16 +553,16 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
             PartitionRuntimeState partitionState = createPartitionState(members);
             OperationService operationService = nodeEngine.getOperationService();
 
-            List<Future> calls = firePartitionStateOperation(members, partitionState, operationService);
+            List<Future> calls = firePartitionStateOperation(partitionState, operationService);
             waitWithDeadline(calls, 3, TimeUnit.SECONDS, partitionStateSyncTimeoutHandler);
         } finally {
             lock.unlock();
         }
     }
 
-    private List<Future> firePartitionStateOperation(Collection<MemberImpl> members,
-                                                     PartitionRuntimeState partitionState,
+    private List<Future> firePartitionStateOperation(PartitionRuntimeState partitionState,
                                                      OperationService operationService) {
+        Collection<MemberImpl> members = node.clusterService.getMemberList();
         List<Future> calls = new ArrayList<Future>(members.size());
         for (MemberImpl member : members) {
             if (!member.localMember()) {
@@ -1536,6 +1534,18 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
     }
 
+    private Collection<MemberImpl> getPartitionHosts() {
+        // Even though the Master's ClusterServiceImpl prevents a node from dropping the PARTITION_HOST Capability if
+        // there is no other node which can host partitions, at any point in time a node can simply close
+        // the connection and no longer be available. If that's the case the Master will have no choice but to
+        // host the partitions.
+        Collection<MemberImpl> members = node.getClusterService().getMemberList(PARTITION_HOST);
+        if (members.isEmpty()) {
+            members.add(node.getLocalMember());
+        }
+        return members;
+    }
+
     private class RepartitioningTask implements Runnable {
         @Override
         public void run() {
@@ -1551,7 +1561,8 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
 
                     migrationQueue.clear();
                     PartitionStateGenerator psg = partitionStateGenerator;
-                    Collection<MemberImpl> members = node.getClusterService().getMemberList(PARTITION_HOST);
+                    Collection<MemberImpl> members = getPartitionHosts();
+
                     Collection<MemberGroup> memberGroups = memberGroupFactory.createMemberGroups(members);
                     Address[][] newState = psg.reArrange(memberGroups, partitions);
 
