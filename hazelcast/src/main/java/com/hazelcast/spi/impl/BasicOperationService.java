@@ -644,8 +644,8 @@ final class BasicOperationService implements InternalOperationService {
                 }
                 // End temporary code
 
-                    if (response instanceof NormalResponse || response instanceof CallTimeoutResponse) {
-                    notifyRemoteCall((NormalResponse) response);
+                if (response instanceof NormalResponse || response instanceof CallTimeoutResponse) {
+                    notifyRemoteCall(response);
                 } else if (response instanceof BackupResponse) {
                     notifyBackupCall(response.getCallId());
                 } else {
