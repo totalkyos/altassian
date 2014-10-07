@@ -129,6 +129,8 @@ public interface InternalPartitionService extends CoreService {
 
     void memberAdded(MemberImpl newMember);
 
+    void memberCapabilityUpdate(MemberImpl updatedMember);
+
     void memberRemoved(MemberImpl deadMember);
 
     boolean prepareToSafeShutdown(long timeout, TimeUnit seconds);

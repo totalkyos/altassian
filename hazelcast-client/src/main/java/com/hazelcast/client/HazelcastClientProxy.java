@@ -41,7 +41,6 @@ import com.hazelcast.core.LifecycleService;
 import com.hazelcast.core.MultiMap;
 import com.hazelcast.core.PartitionService;
 import com.hazelcast.core.ReplicatedMap;
-import com.hazelcast.instance.MemberRole;
 import com.hazelcast.instance.TerminatedLifecycleService;
 import com.hazelcast.logging.LoggingService;
 import com.hazelcast.mapreduce.JobTracker;
@@ -52,7 +51,6 @@ import com.hazelcast.transaction.TransactionOptions;
 import com.hazelcast.transaction.TransactionalTask;
 
 import java.util.Collection;
-import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
 public final class HazelcastClientProxy
@@ -117,11 +115,6 @@ public final class HazelcastClientProxy
     @Override
     public ILock getLock(Object key) {
         return getClient().getLock(key);
-    }
-
-    @Override
-    public void updateRoles(Set<MemberRole> roles) {
-        getClient().updateRoles(roles);
     }
 
     @Override

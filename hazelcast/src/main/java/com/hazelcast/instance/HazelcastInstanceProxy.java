@@ -108,11 +108,6 @@ public final class HazelcastInstanceProxy implements HazelcastInstance {
     }
 
     @Override
-    public void updateRoles(Set<MemberRole> roles) {
-        getOriginal().updateRoles(roles);
-    }
-
-    @Override
     public ILock getLock(String key) {
         return getOriginal().getLock(key);
     }

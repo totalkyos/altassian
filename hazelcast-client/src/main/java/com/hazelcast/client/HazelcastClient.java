@@ -78,7 +78,6 @@ import com.hazelcast.core.PartitioningStrategy;
 import com.hazelcast.core.ReplicatedMap;
 import com.hazelcast.executor.impl.DistributedExecutorService;
 import com.hazelcast.instance.GroupProperties;
-import com.hazelcast.instance.MemberRole;
 import com.hazelcast.instance.OutOfMemoryErrorDispatcher;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
@@ -106,7 +105,6 @@ import com.hazelcast.util.ExceptionUtil;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
@@ -342,11 +340,6 @@ public final class HazelcastClient implements HazelcastInstance {
         //this method will be deleted in the near future.
         String name = LockProxy.convertToStringKey(key, serializationService);
         return getDistributedObject(LockServiceImpl.SERVICE_NAME, name);
-    }
-
-    @Override
-    public void updateRoles(Set<MemberRole> roles) {
-        throw new UnsupportedOperationException("Client instances cannot change their role in the cluster");
     }
 
     @Override
