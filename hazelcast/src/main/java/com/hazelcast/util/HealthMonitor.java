@@ -175,6 +175,8 @@ public class HealthMonitor extends Thread {
         private final String responseStats;
         private final int runningOperationsCount;
         private final int remoteOperationsCount;
+        private final long executedOperationsCount;
+        private final String remoteOperationStats;
         private final int proxyCount;
         private final int clientEndpointCount;
         private final int activeConnectionCount;
@@ -213,6 +215,8 @@ public class HealthMonitor extends Thread {
             responseStats = operationService.getResponseStats();
             runningOperationsCount = operationService.getRunningOperationsCount();
             remoteOperationsCount = operationService.getRemoteOperationsCount();
+            executedOperationsCount = operationService.getExecutedOperationCount();
+            remoteOperationStats = operationService.getRemoteOperationStats();
             proxyCount = proxyService.getProxyCount();
             clientEndpointCount = clientEngine.getClientEndpointCount();
             activeConnectionCount = connectionManager.getActiveConnectionCount();
@@ -278,6 +282,8 @@ public class HealthMonitor extends Thread {
             sb.append("lock.count=").append(lockCount).append(", ");
             sb.append("operations.remote.size=").append(remoteOperationsCount).append(", ");
             sb.append("operations.running.size=").append(runningOperationsCount).append(", ");
+            sb.append("operations.executed.count=").append(executedOperationsCount).append(", ");
+            sb.append("operations.remote.stats=(").append(remoteOperationStats).append("), ");
             sb.append("proxy.count=").append(proxyCount).append(", ");
             sb.append("clientEndpoint.count=").append(clientEndpointCount).append(", ");
             sb.append("connection.active.count=").append(activeConnectionCount).append(", ");
