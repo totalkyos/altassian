@@ -121,5 +121,7 @@ public interface OperationService {
      */
     boolean send(Response response, Address target);
 
+    String getRemoteOperationStats();
+
     String getResponseStats();
 }
