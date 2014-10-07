@@ -1006,9 +1006,13 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
                     node.getPartitionService().memberCapabilityUpdate(member);
                 }
 
+                logger.info(String.format("Updated member [%s] capabilities to [%s]", member, newCapabilities));
+
                 // Let other members know they should update their members
                 invokeOnOthers(new MemberCapabilityChangedOperation(member.getUuid(), newCapabilities));
             }
+        } else {
+            logger.info(String.format("Cannot update member [%s] capabilities to [%s]", member, newCapabilities));
         }
     }
 
