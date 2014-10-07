@@ -20,6 +20,7 @@ import com.hazelcast.cluster.MemberInfo;
 import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.MigrationEvent;
 import com.hazelcast.core.MigrationListener;
+import com.hazelcast.instance.GroupProperties;
 import com.hazelcast.instance.MemberImpl;
 import com.hazelcast.instance.Node;
 import com.hazelcast.logging.ILogger;
