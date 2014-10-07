@@ -16,7 +16,7 @@
 
 package com.hazelcast.cluster;
 
-import com.hazelcast.instance.MemberRole;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
@@ -33,18 +33,18 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
     private Credentials credentials;
     private int tryCount;
     private Map<String, Object> attributes;
-    private Set<MemberRole> roles;
+    private Set<Capability> capabilities;
 
     public JoinRequest() {
     }
 
     public JoinRequest(byte packetVersion, int buildNumber, Address address, String uuid, ConfigCheck config,
-                       Credentials credentials, int memberCount, int tryCount, Set<MemberRole> roles,
+                       Credentials credentials, int memberCount, int tryCount, Set<Capability> capabilities,
                        Map<String, Object> attributes) {
         super(packetVersion, buildNumber, address, uuid, config, memberCount);
         this.credentials = credentials;
         this.tryCount = tryCount;
-        this.roles = roles;
+        this.capabilities = capabilities;
         this.attributes = attributes;
     }
 
@@ -64,8 +64,8 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
         return attributes;
     }
 
-    public Set<MemberRole> getRoles() {
-        return roles;
+    public Set<Capability> getCapabilities() {
+        return capabilities;
     }
 
     @Override
@@ -77,7 +77,7 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
         }
         tryCount = in.readInt();
 
-        roles = MemberRole.readRoles(in);
+        capabilities = Capability.readCapabilities(in);
 
         int size = in.readInt();
         attributes = new HashMap<String, Object>(size, 1.0f);
@@ -94,7 +94,7 @@ public class JoinRequest extends JoinMessage implements DataSerializable {
         out.writeObject(credentials);
         out.writeInt(tryCount);
 
-        MemberRole.writeRoles(out, roles);
+        Capability.writeCapabilities(out, capabilities);
 
         out.writeInt(attributes.size());
         for (Map.Entry<String, Object> entry : attributes.entrySet()) {

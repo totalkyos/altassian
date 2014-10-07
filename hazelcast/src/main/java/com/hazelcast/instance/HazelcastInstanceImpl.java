@@ -76,7 +76,6 @@ import com.hazelcast.util.HealthMonitor;
 import com.hazelcast.util.HealthMonitorLevel;
 
 import java.util.Collection;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -233,11 +232,6 @@ public final class HazelcastInstanceImpl
         }
         String name = LockProxy.convertToStringKey(key, node.getSerializationService());
         return getLock(name);
-    }
-
-    @Override
-    public void updateRoles(Set<MemberRole> roles) {
-        node.updateRoles(roles);
     }
 
     @Override
