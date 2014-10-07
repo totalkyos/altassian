@@ -119,6 +119,7 @@ final class BasicOperationService implements InternalOperationService {
     final ConcurrentMap<Long, BasicInvocation> invocations;
     final BasicOperationScheduler scheduler;
     private final AtomicLong executedOperationsCount = new AtomicLong();
+    private boolean doCountRemoteOperations = false;
     private final AtomicLong executedRemoteOperationsCount = new AtomicLong();
     private final AtomicLong serializationTime = new AtomicLong();
     private final AtomicLong worstSerializationTime = new AtomicLong();
@@ -188,6 +189,7 @@ final class BasicOperationService implements InternalOperationService {
 
     @Override
     public String getRemoteOperationStats() {
+        doCountRemoteOperations = true;     // Only start collecting the stats when somebody asks for them.
         StringBuilder sb = new StringBuilder();
 
         long executedRemoteOperationsCountValue = appendAndClear(sb, executedRemoteOperationsCount, "executed");
@@ -509,6 +511,9 @@ final class BasicOperationService implements InternalOperationService {
 
     // Record various statistics for an Operation.
     private void countRemoteOperation(Operation op, long time, int bufferSize) {
+        if (!doCountRemoteOperations) {
+            return;
+        }
         executedRemoteOperationsCount.incrementAndGet();
 
         String name = op.getClass().getSimpleName();
