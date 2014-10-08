@@ -16,6 +16,7 @@
 
 package com.hazelcast.cluster;
 
+import com.hazelcast.instance.Capability;
 import com.hazelcast.instance.MemberImpl;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.ObjectDataInput;
@@ -23,31 +24,34 @@ import com.hazelcast.nio.ObjectDataOutput;
 import com.hazelcast.nio.serialization.DataSerializable;
 
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 public class MemberInfo implements DataSerializable {
     Address address;
     String uuid;
     Map<String, Object> attributes;
+    Set<Capability> capabilities;
 
     public MemberInfo() {
     }
 
     public MemberInfo(Address address) {
-        super();
         this.address = address;
-    }
-
-    public MemberInfo(Address address, String uuid, Map<String, Object> attributes) {
-        super();
-        this.address = address;
-        this.uuid = uuid;
-        this.attributes = new HashMap<String, Object>(attributes);
+        capabilities = EnumSet.allOf(Capability.class);
     }
 
     public MemberInfo(MemberImpl member) {
-        this(member.getAddress(), member.getUuid(), member.getAttributes());
+        this(member.getAddress(), member.getUuid(), member.getCapabilities(), member.getAttributes());
+    }
+
+    public MemberInfo(Address address, String uuid, Set<Capability> capabilities, Map<String, Object> attributes) {
+        this(address);
+        this.uuid = uuid;
+        this.capabilities = capabilities;
+        this.attributes = new HashMap<String, Object>(attributes);
     }
 
     @Override
@@ -57,6 +61,9 @@ public class MemberInfo implements DataSerializable {
         if (in.readBoolean()) {
             uuid = in.readUTF();
         }
+
+        capabilities = Capability.readCapabilities(in);
+
         int size = in.readInt();
         if (size > 0) {
             attributes = new HashMap<String, Object>();
@@ -76,6 +83,9 @@ public class MemberInfo implements DataSerializable {
         if (hasUuid) {
             out.writeUTF(uuid);
         }
+
+        Capability.writeCapabilities(out, capabilities);
+
         out.writeInt(attributes == null ? 0 : attributes.size());
         if (attributes != null) {
             for (Map.Entry<String, Object> entry : attributes.entrySet()) {

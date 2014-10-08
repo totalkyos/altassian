@@ -18,17 +18,19 @@ package com.hazelcast.config;
 
 import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.ManagedContext;
+import com.hazelcast.instance.Capability;
 
 import java.io.File;
 import java.net.URL;
 import java.util.Collection;
-import java.util.Map;
-import java.util.List;
-import java.util.Set;
-import java.util.Properties;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -37,7 +39,7 @@ import static java.text.MessageFormat.format;
 
 /**
  * Contains all the configuration to start a {@link com.hazelcast.core.HazelcastInstance}. A Config
- * can be created programmatically, but can also be configured using XML, see {@link com.hazelcast.config.XmlConfigBuilder}.
+ * can be created programmatically, but can also be configured using XML, see {@link XmlConfigBuilder}.
  * <p/>
  * Config instances can be shared between threads, but should not be modified after they are used to
  * create HazelcastInstances.
@@ -99,6 +101,8 @@ public class Config {
     private MemberAttributeConfig memberAttributeConfig = new MemberAttributeConfig();
 
     private String licenseKey;
+
+    private Set<Capability> capabilities = EnumSet.allOf(Capability.class);
 
     public Config() {
     }
@@ -170,6 +174,25 @@ public class Config {
     public Config setInstanceName(String instanceName) {
         this.instanceName = instanceName;
         return this;
+    }
+
+    /**
+     * Sets the initial capabilities the Hazelcast instance should have in the cluster. These capabilities can later be
+     * updated using {@link com.hazelcast.core.Member#updateCapabilities(java.util.Set)}
+     * @param capabilities The capabilities to set in the instance.
+     * @return This config instance.
+     * @since 3.3-atlassian-1
+     */
+    public Config setCapabilities(Set<Capability> capabilities) {
+        this.capabilities = capabilities;
+        return this;
+    }
+
+    /**
+     * @return the initial set of capabilities an instance must have when joining the cluster.
+     */
+    public Set<Capability> getCapabilities() {
+        return capabilities;
     }
 
     public GroupConfig getGroupConfig() {
