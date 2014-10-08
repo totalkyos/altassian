@@ -23,6 +23,8 @@ import com.hazelcast.instance.MemberImpl;
 import com.hazelcast.instance.Node;
 import com.hazelcast.instance.OutOfMemoryErrorDispatcher;
 import com.hazelcast.logging.ILogger;
+import com.hazelcast.map.operation.InvalidateNearCacheOperation;
+import com.hazelcast.map.operation.KeyBasedMapOperation;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.Connection;
 import com.hazelcast.nio.IOUtil;
@@ -111,10 +113,19 @@ final class BasicOperationService implements InternalOperationService {
     private static final int CORE_SIZE_CHECK = 8;
     private static final int CORE_SIZE_FACTOR = 4;
     private static final int CONCURRENCY_LEVEL = 16;
+    private static final double REMOTE_OPERATION_STATISTICS_THRESHOLD = 0.05;
+    private static final int STATISTICS_SPIN_MAX = 3;
 
     final ConcurrentMap<Long, BasicInvocation> invocations;
     final BasicOperationScheduler scheduler;
     private final AtomicLong executedOperationsCount = new AtomicLong();
+    private boolean doCountRemoteOperations = false;
+    private final AtomicLong executedRemoteOperationsCount = new AtomicLong();
+    private final AtomicLong serializationTime = new AtomicLong();
+    private final AtomicLong worstSerializationTime = new AtomicLong();
+    private String worstOperation = null;
+    private final AtomicLong remoteOperationBytes = new AtomicLong();
+    private final ConcurrentMap<String, Long> executedRemoteOperationsByName;
 
     private final NodeEngineImpl nodeEngine;
     private final Node node;
@@ -143,6 +154,7 @@ final class BasicOperationService implements InternalOperationService {
         this.executingCalls =
                 new ConcurrentHashMap<RemoteCallKey, RemoteCallKey>(INITIAL_CAPACITY, LOAD_FACTOR, concurrencyLevel);
         this.invocations = new ConcurrentHashMap<Long, BasicInvocation>(INITIAL_CAPACITY, LOAD_FACTOR, concurrencyLevel);
+        this.executedRemoteOperationsByName = new ConcurrentHashMap<String, Long>();
         this.scheduler = new BasicOperationScheduler(node, executionService, new BasicDispatcherImpl());
         this.operationHandler = new OperationHandler();
         this.operationBackupHandler = new OperationBackupHandler();
@@ -176,6 +188,31 @@ final class BasicOperationService implements InternalOperationService {
     }
 
     @Override
+    public String getRemoteOperationStats() {
+        doCountRemoteOperations = true;     // Only start collecting the stats when somebody asks for them.
+        StringBuilder sb = new StringBuilder();
+
+        long executedRemoteOperationsCountValue = appendAndClear(sb, executedRemoteOperationsCount, "executed");
+
+        // Don't dump all operation names, just those whose frequency exceeds a threshold of "significance."
+        long significantRemoteOperationCount = (long)(executedRemoteOperationsCountValue * REMOTE_OPERATION_STATISTICS_THRESHOLD);
+        for (Map.Entry<String, Long> entry: executedRemoteOperationsByName.entrySet()) {
+            long count = entry.getValue();
+            String name = entry.getKey();
+            if (count > significantRemoteOperationCount) {
+                sb.append(name).append("=").append(count).append(", ");
+            }
+            clearRemoteOperationByName(name, count);
+        }
+        appendAndClear(sb, remoteOperationBytes, "bytes");
+        appendAndClearNanos(sb, serializationTime, "time");
+        if (appendAndResetNanos(sb, worstSerializationTime, "worst", worstOperation)) {
+            worstOperation = null;
+        }
+        return sb.toString();
+    }
+
+    @Override
     public int getRemoteOperationsCount() {
         return invocations.size();
     }
@@ -183,6 +220,11 @@ final class BasicOperationService implements InternalOperationService {
     @Override
     public int getResponseQueueSize() {
         return scheduler.getResponseQueueSize();
+    }
+
+    @Override
+    public String getResponseStats() {
+        return responsePacketHandler.getResponseStats();
     }
 
     @Override
@@ -345,7 +387,16 @@ final class BasicOperationService implements InternalOperationService {
     }
 
     private boolean send(Operation op, Connection connection) {
+        // Temporary code for diagnostic purposes - see STASHDEV-7788
+        final long startTime = System.nanoTime();
+        // End temporary code
+
         Data data = nodeEngine.toData(op);
+
+        // Temporary code for diagnostic purposes - see STASHDEV-7788
+        final long time = System.nanoTime() - startTime;
+        countRemoteOperation(op, time, data.bufferSize());
+        // End temporary code
 
         //enable this line to get some logging of sizes of operations.
         //System.out.println(op.getClass()+" "+data.bufferSize());
@@ -427,6 +478,99 @@ final class BasicOperationService implements InternalOperationService {
         }
         invocations.clear();
         scheduler.shutdown();
+    }
+
+    // Convenience function for dumping a counter and clearing it in a thread safe way.
+    // Returns the value of the counter just read.
+    private long appendAndClear(StringBuilder sb, AtomicLong counter, String name) {
+        long value = counter.get();
+        sb.append(name + "=").append(value).append(", ");
+        counter.addAndGet(-value);
+        return value;
+    }
+
+    // Convenience function for dumping a nanosecond counter and clearing it in a thread safe way.
+    private void appendAndClearNanos(StringBuilder sb, AtomicLong counter, String name) {
+        long value = counter.get();
+        sb.append(name + "=").append(value / 1000000.0).append("ms, ");
+        counter.addAndGet(-value);
+    }
+
+    // Convenience function for dumping a nanosecond latch plus associated data, and resetting in a thread safe way.
+    // The latch is assumed to track the "worst" value of some statistic in some time window, so that if the latch is
+    // modified by another thread it must be with another even "worse" value in the next time window - so the latch is
+    // not reset.  Returns true if the latch was reset, or false if not.
+    private boolean appendAndResetNanos(StringBuilder sb, AtomicLong latch, String name, Object obj) {
+        long value = latch.get();
+        sb.append(name + "=").append(value / 1000000.0).append("ms");
+        if (obj != null) {
+            sb.append(" - ").append(obj.toString());
+        }
+        return latch.compareAndSet(value, 0L);
+    }
+
+    // Record various statistics for an Operation.
+    private void countRemoteOperation(Operation op, long time, int bufferSize) {
+        if (!doCountRemoteOperations) {
+            return;
+        }
+        executedRemoteOperationsCount.incrementAndGet();
+
+        String name = op.getClass().getSimpleName();
+        if (op instanceof KeyBasedMapOperation) {
+            name += "(" + ((KeyBasedMapOperation) op).getName() + ")";
+        } else if (op instanceof InvalidateNearCacheOperation) {
+            name += "(" + ((InvalidateNearCacheOperation) op).getMapName() + ")";
+        } else if (op instanceof AbstractNamedOperation) {
+            name += "(" + ((AbstractNamedOperation) op).getName() + ")";
+        }
+        incrementRemoteOperationByName(name);
+
+        serializationTime.addAndGet(time);
+        long worstSerializationTimeValue;
+        for (int i = 0; (worstSerializationTimeValue = worstSerializationTime.longValue()) < time &&
+                i < STATISTICS_SPIN_MAX; i++) {
+            if (worstSerializationTime.compareAndSet(worstSerializationTimeValue, time)) {
+                worstOperation = name;
+            }
+        }
+
+        remoteOperationBytes.addAndGet(bufferSize);
+    }
+
+    // Convenience function for clearing a counter in the `executedRemoteOperationsByName` ConcurrentHashMap in a
+    // thread safe way.
+    // Safe to call within an iterator: "Iterators and Enumerations return elements reflecting the state of the hash
+    // table at some point at or since the creation of the iterator/enumeration. They do not throw
+    // ConcurrentModificationException."
+    private void clearRemoteOperationByName(String name, long value) {
+        if (!executedRemoteOperationsByName.remove(name, value)) {
+            for (int tries = 0; tries < STATISTICS_SPIN_MAX; tries++) {
+                Long oldValue = executedRemoteOperationsByName.get(name);
+                if (oldValue == null) {
+                    break;
+                } else if (executedRemoteOperationsByName.replace(name, oldValue, oldValue-value)) {
+                    break;
+                }
+            }
+        }
+    }
+
+    // Convenience function for incrementing a counter in the `executedRemoteOperationsByName` ConcurrentHashMap in a
+    // thread safe way.
+    private void incrementRemoteOperationByName(String name) {
+        for (int tries = 0; tries < STATISTICS_SPIN_MAX; tries++) {
+            Long oldValue = executedRemoteOperationsByName.get(name);
+            if (oldValue != null) {
+                if (executedRemoteOperationsByName.replace(name, oldValue, oldValue+1L)) {
+                    break;
+                }
+            } else {
+                if (executedRemoteOperationsByName.putIfAbsent(name, 1L) == null) {
+                    break;
+                }
+            }
+        }
     }
 
     /**
@@ -559,10 +703,43 @@ final class BasicOperationService implements InternalOperationService {
      * Responsible for handling responses.
      */
     private final class ResponsePacketHandler {
+        // Temporary members for diagnostic purposes - see STASHDEV-7788
+        private AtomicLong deserializationTime = new AtomicLong(0L);
+        private AtomicLong responsesProcessed = new AtomicLong(0L);
+        private AtomicLong worstDeserializationTime = new AtomicLong(0L);
+        private Response worstResponse = null;
+
+        public String getResponseStats() {
+            StringBuilder sb = new StringBuilder();
+            appendAndClear(sb, responsesProcessed, "processed");
+            appendAndClearNanos(sb, deserializationTime, "time");
+            if (appendAndResetNanos(sb, worstDeserializationTime, "worst", worstResponse)) {
+                worstResponse = null;
+            }
+            return sb.toString();
+        }
+
         private void handle(Packet packet) {
             try {
+                // Temporary code for diagnostic purposes - see STASHDEV-7788
+                final long startTime = System.nanoTime();
+                // End temporary code
+
                 final Data data = packet.getData();
                 final Response response = (Response) nodeEngine.toObject(data);
+
+                // Temporary code for diagnostic purposes - see STASHDEV-7788
+                final long time = System.nanoTime() - startTime;
+                responsesProcessed.incrementAndGet();
+                deserializationTime.addAndGet(time);
+                long worstDeserializationTimeValue;
+                for (int i = 0; (worstDeserializationTimeValue = worstDeserializationTime.longValue()) < time &&
+                        i < STATISTICS_SPIN_MAX; i++) {
+                    if (worstDeserializationTime.compareAndSet(worstDeserializationTimeValue, time)) {
+                        worstResponse = response;
+                    }
+                }
+                // End temporary code
 
                 if (response instanceof NormalResponse) {
                     notifyRemoteCall((NormalResponse) response);
