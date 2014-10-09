@@ -511,7 +511,11 @@ final class BasicOperationService implements InternalOperationService {
 
     private static String getNameOfOperation(Operation op) {
         String name = op.getClass().getSimpleName();
-        if (op instanceof KeyBasedMapOperation) {
+        if (op instanceof Backup) {
+            BackupAwareOperation parentOp = ((Backup) op).getParentOp();
+            name = "Backup(" + getNameOfOperation((Operation) parentOp) + "/sync=" + parentOp.getSyncBackupCount() +
+                        "/async=" + parentOp.getAsyncBackupCount() + ")";
+        } else if (op instanceof KeyBasedMapOperation) {
             name += "(" + ((KeyBasedMapOperation) op).getName() + ")";
         } else if (op instanceof InvalidateNearCacheOperation) {
             name += "(" + ((InvalidateNearCacheOperation) op).getMapName() + ")";
@@ -519,13 +523,6 @@ final class BasicOperationService implements InternalOperationService {
             name += "(" + ((AbstractNamedOperation) op).getName() + ")";
         }
         return name;
-    }
-
-    // Record statistics for a Backup.
-    private void countBackup(BackupAwareOperation backupAwareOp) {
-        String name = getNameOfOperation((Operation) backupAwareOp);
-        incrementRemoteOperationByName("Backup(" + name + "/sync=" + backupAwareOp.getSyncBackupCount() + "/async=" +
-                backupAwareOp.getAsyncBackupCount() + ")");
     }
 
     // Record various statistics for an Operation.
@@ -536,11 +533,7 @@ final class BasicOperationService implements InternalOperationService {
         executedRemoteOperationsCount.incrementAndGet();
 
         String name = getNameOfOperation(op);
-
-        // Backups are counted elsewhere - see {@link #countBackup}
-        if (!(op instanceof Backup)) {
-            incrementRemoteOperationByName(name);
-        }
+        incrementRemoteOperationByName(name);
 
         serializationTime.addAndGet(time);
         long worstSerializationTimeValue;
@@ -1103,7 +1096,6 @@ final class BasicOperationService implements InternalOperationService {
 
                 boolean isSyncBackup = replicaIndex <= syncBackupCount;
                 Backup backup = newBackup(backupAwareOp, replicaVersions, replicaIndex, isSyncBackup);
-                countBackup(backupAwareOp);
                 send(backup, target);
 
                 if (isSyncBackup) {
@@ -1118,7 +1110,7 @@ final class BasicOperationService implements InternalOperationService {
             Operation op = (Operation) backupAwareOp;
             Operation backupOp = initBackupOperation(backupAwareOp, replicaIndex);
             Data backupOpData = nodeEngine.getSerializationService().toData(backupOp);
-            Backup backup = new Backup(backupOpData, op.getCallerAddress(), replicaVersions, isSyncBackup);
+            Backup backup = new Backup(backupOpData, op.getCallerAddress(), replicaVersions, isSyncBackup, backupAwareOp);
             backup.setPartitionId(op.getPartitionId())
                     .setReplicaIndex(replicaIndex)
                     .setServiceName(op.getServiceName())
