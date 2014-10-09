@@ -113,7 +113,7 @@ final class BasicOperationService implements InternalOperationService {
     private static final int CORE_SIZE_CHECK = 8;
     private static final int CORE_SIZE_FACTOR = 4;
     private static final int CONCURRENCY_LEVEL = 16;
-    private static final double REMOTE_OPERATION_STATISTICS_THRESHOLD = 0.05;
+    private static final double REMOTE_OPERATION_STATISTICS_THRESHOLD = 0.01;
     private static final int STATISTICS_SPIN_MAX = 3;
 
     final ConcurrentMap<Long, BasicInvocation> invocations;
@@ -509,13 +509,7 @@ final class BasicOperationService implements InternalOperationService {
         return latch.compareAndSet(value, 0L);
     }
 
-    // Record various statistics for an Operation.
-    private void countRemoteOperation(Operation op, long time, int bufferSize) {
-        if (!doCountRemoteOperations) {
-            return;
-        }
-        executedRemoteOperationsCount.incrementAndGet();
-
+    private static String getNameOfOperation(Operation op) {
         String name = op.getClass().getSimpleName();
         if (op instanceof KeyBasedMapOperation) {
             name += "(" + ((KeyBasedMapOperation) op).getName() + ")";
@@ -524,7 +518,29 @@ final class BasicOperationService implements InternalOperationService {
         } else if (op instanceof AbstractNamedOperation) {
             name += "(" + ((AbstractNamedOperation) op).getName() + ")";
         }
-        incrementRemoteOperationByName(name);
+        return name;
+    }
+
+    // Record statistics for a Backup.
+    private void countBackup(BackupAwareOperation backupAwareOp) {
+        String name = getNameOfOperation((Operation) backupAwareOp);
+        incrementRemoteOperationByName("Backup(" + name + "/sync=" + backupAwareOp.getSyncBackupCount() + "/async=" +
+                backupAwareOp.getAsyncBackupCount() + ")");
+    }
+
+    // Record various statistics for an Operation.
+    private void countRemoteOperation(Operation op, long time, int bufferSize) {
+        if (!doCountRemoteOperations) {
+            return;
+        }
+        executedRemoteOperationsCount.incrementAndGet();
+
+        String name = getNameOfOperation(op);
+
+        // Backups are counted elsewhere - see {@link #countBackup}
+        if (!(op instanceof Backup)) {
+            incrementRemoteOperationByName(name);
+        }
 
         serializationTime.addAndGet(time);
         long worstSerializationTimeValue;
@@ -1087,6 +1103,7 @@ final class BasicOperationService implements InternalOperationService {
 
                 boolean isSyncBackup = replicaIndex <= syncBackupCount;
                 Backup backup = newBackup(backupAwareOp, replicaVersions, replicaIndex, isSyncBackup);
+                countBackup(backupAwareOp);
                 send(backup, target);
 
                 if (isSyncBackup) {
