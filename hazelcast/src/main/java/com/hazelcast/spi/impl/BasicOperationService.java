@@ -113,7 +113,7 @@ final class BasicOperationService implements InternalOperationService {
     private static final int CORE_SIZE_CHECK = 8;
     private static final int CORE_SIZE_FACTOR = 4;
     private static final int CONCURRENCY_LEVEL = 16;
-    private static final double REMOTE_OPERATION_STATISTICS_THRESHOLD = 0.05;
+    private static final double REMOTE_OPERATION_STATISTICS_THRESHOLD = 0.01;
     private static final int STATISTICS_SPIN_MAX = 3;
 
     final ConcurrentMap<Long, BasicInvocation> invocations;
@@ -509,6 +509,22 @@ final class BasicOperationService implements InternalOperationService {
         return latch.compareAndSet(value, 0L);
     }
 
+    private static String getNameOfOperation(Operation op) {
+        String name = op.getClass().getSimpleName();
+        if (op instanceof Backup) {
+            BackupAwareOperation parentOp = ((Backup) op).getParentOp();
+            name = "Backup(" + getNameOfOperation((Operation) parentOp) + "/sync=" + parentOp.getSyncBackupCount() +
+                        "/async=" + parentOp.getAsyncBackupCount() + ")";
+        } else if (op instanceof KeyBasedMapOperation) {
+            name += "(" + ((KeyBasedMapOperation) op).getName() + ")";
+        } else if (op instanceof InvalidateNearCacheOperation) {
+            name += "(" + ((InvalidateNearCacheOperation) op).getMapName() + ")";
+        } else if (op instanceof AbstractNamedOperation) {
+            name += "(" + ((AbstractNamedOperation) op).getName() + ")";
+        }
+        return name;
+    }
+
     // Record various statistics for an Operation.
     private void countRemoteOperation(Operation op, long time, int bufferSize) {
         if (!doCountRemoteOperations) {
@@ -516,14 +532,7 @@ final class BasicOperationService implements InternalOperationService {
         }
         executedRemoteOperationsCount.incrementAndGet();
 
-        String name = op.getClass().getSimpleName();
-        if (op instanceof KeyBasedMapOperation) {
-            name += "(" + ((KeyBasedMapOperation) op).getName() + ")";
-        } else if (op instanceof InvalidateNearCacheOperation) {
-            name += "(" + ((InvalidateNearCacheOperation) op).getMapName() + ")";
-        } else if (op instanceof AbstractNamedOperation) {
-            name += "(" + ((AbstractNamedOperation) op).getName() + ")";
-        }
+        String name = getNameOfOperation(op);
         incrementRemoteOperationByName(name);
 
         serializationTime.addAndGet(time);
@@ -1101,7 +1110,7 @@ final class BasicOperationService implements InternalOperationService {
             Operation op = (Operation) backupAwareOp;
             Operation backupOp = initBackupOperation(backupAwareOp, replicaIndex);
             Data backupOpData = nodeEngine.getSerializationService().toData(backupOp);
-            Backup backup = new Backup(backupOpData, op.getCallerAddress(), replicaVersions, isSyncBackup);
+            Backup backup = new Backup(backupOpData, op.getCallerAddress(), replicaVersions, isSyncBackup, backupAwareOp);
             backup.setPartitionId(op.getPartitionId())
                     .setReplicaIndex(replicaIndex)
                     .setServiceName(op.getServiceName())
