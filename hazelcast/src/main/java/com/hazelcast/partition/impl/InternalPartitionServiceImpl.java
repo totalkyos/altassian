@@ -20,6 +20,7 @@ import com.hazelcast.cluster.MemberInfo;
 import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.MigrationEvent;
 import com.hazelcast.core.MigrationListener;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.instance.MemberImpl;
 import com.hazelcast.instance.Node;
 import com.hazelcast.logging.ILogger;
@@ -56,17 +57,7 @@ import com.hazelcast.util.scheduler.ScheduleType;
 import com.hazelcast.util.scheduler.ScheduledEntry;
 import com.hazelcast.util.scheduler.ScheduledEntryProcessor;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -1345,6 +1336,43 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
     }
 
+    @Override
+    public boolean drain(long timeout, TimeUnit timeunit) {
+        MemberImpl localMember = node.localMember;
+        if (localMember.hasCapability(PARTITION_HOST)) {
+            Set<Capability> capabilities = EnumSet.copyOf(localMember.getCapabilities());
+            capabilities.remove(PARTITION_HOST);
+
+            localMember.updateCapabilities(capabilities);
+        }
+
+        return awaitEmpty(timeout, timeunit);
+    }
+
+    private boolean awaitEmpty(long timeout, TimeUnit timeunit) {
+        Collection<MemberImpl> partitionHosts = getPartitionHosts();
+        if (partitionHosts.contains(node.getLocalMember()) && partitionHosts.size() == 1) {
+            return false;
+        }
+
+        boolean isEmpty = checkIsEmpty();
+        for (long timeoutInMillis = timeunit.toMillis(timeout); timeoutInMillis > 0 && !isEmpty; isEmpty = checkIsEmpty()) {
+            timeoutInMillis = sleepWithBusyWait(timeoutInMillis, DEFAULT_PAUSE_MILLIS);
+        }
+
+        return isEmpty;
+    }
+
+    private boolean checkIsEmpty() {
+        Address localAddress = node.localMember.getAddress();
+        for (int i = 0; i < partitionCount; i++) {
+            if (localAddress.equals(partitions[i].getOwnerOrNull())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public void pauseMigration() {
         migrationActive.set(false);
     }
@@ -1464,7 +1492,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         // host the partitions.
         Collection<MemberImpl> members = node.getClusterService().getMemberList(PARTITION_HOST);
         if (members.isEmpty()) {
-            members.add(node.getLocalMember());
+            members.add(nodeEngine.getClusterService().getMember(node.getMasterAddress()));
         }
         return members;
     }
@@ -1514,7 +1542,9 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                             currentPartition.setPartitionInfo(replicas);
                         }
                     }
-                    syncPartitionRuntimeState(members);
+
+                    syncPartitionRuntimeState();
+
                     logMigrationStatistics(migrationCount, lostCount);
                 } finally {
                     lock.unlock();
