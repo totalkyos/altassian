@@ -1510,7 +1510,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                             currentPartition.setPartitionInfo(replicas);
                         }
                     }
-                    syncPartitionRuntimeState(members);
+                    syncPartitionRuntimeState();
                     logMigrationStatistics(migrationCount, lostCount);
                 } finally {
                     lock.unlock();
