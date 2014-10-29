@@ -9,7 +9,6 @@ import java.util.EnumSet;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.hazelcast.instance.Capability.EXECUTOR;
 import static com.hazelcast.instance.Capability.PARTITION_HOST;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -22,19 +21,15 @@ public class MemberImplTest {
     @Test
     public void testMemberCapability() throws Exception {
         MemberImpl allCapabilitiesMember = createMember(EnumSet.allOf(Capability.class));
-        assertTrue(allCapabilitiesMember.hasCapability(EXECUTOR));
-        assertTrue(allCapabilitiesMember.hasCapability(PARTITION_HOST));
 
-        MemberImpl executorMember = createMember(EnumSet.of(PARTITION_HOST));
-        assertTrue(executorMember.hasCapability(EXECUTOR));
-        assertFalse(executorMember.hasCapability(PARTITION_HOST));
+        for (Capability capability : Capability.values()) {
+            assertTrue(allCapabilitiesMember.hasCapability(capability));
+        }
 
         MemberImpl partitionHostMember = createMember(EnumSet.of(PARTITION_HOST));
-        assertFalse(partitionHostMember.hasCapability(EXECUTOR));
         assertTrue(partitionHostMember.hasCapability(PARTITION_HOST));
 
         MemberImpl noCapabilityMember = createMember(EnumSet.noneOf(Capability.class));
-        assertFalse(noCapabilityMember.hasCapability(EXECUTOR));
         assertFalse(noCapabilityMember.hasCapability(PARTITION_HOST));
     }
 
