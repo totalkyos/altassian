@@ -14,14 +14,9 @@ import java.util.Set;
  */
 public enum Capability {
     /**
-     * The EXECUTOR capability allows a member receive application tasks
-     * that have been scheduled for execution in the cluster
-     */
-    EXECUTOR(0),
-    /**
      * The PARTITION_HOST capability makes a member eligible to host data partitions / replicas
      */
-    PARTITION_HOST(1);
+    PARTITION_HOST(0);
 
     private final int id;
 
