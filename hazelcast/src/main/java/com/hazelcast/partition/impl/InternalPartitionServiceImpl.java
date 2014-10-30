@@ -37,7 +37,6 @@ import com.hazelcast.partition.membergroup.MemberGroup;
 import com.hazelcast.partition.membergroup.MemberGroupFactory;
 import com.hazelcast.partition.membergroup.MemberGroupFactoryFactory;
 import com.hazelcast.spi.Callback;
-import com.hazelcast.util.scheduler.CoalescingDelayedTrigger;
 import com.hazelcast.spi.EventPublishingService;
 import com.hazelcast.spi.EventRegistration;
 import com.hazelcast.spi.EventService;
@@ -324,13 +323,13 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         if (!member.localMember()) {
             updateMemberGroupsSize();
         }
-
         if (node.isMaster() && node.isActive()) {
-            enqueueMigration();
-
             lock.lock();
             try {
+                migrationQueue.clear();
                 if (initialized) {
+                    migrationQueue.add(new RepartitioningTask());
+
                     // send initial partition table to newly joined node.
                     Collection<MemberImpl> members = node.clusterService.getMemberList();
                     PartitionStateOperation op = new PartitionStateOperation(createPartitionState(members));
@@ -342,24 +341,29 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
     }
 
-    private void enqueueMigration() {
-        GroupProperties groupProperties = node.getGroupProperties();
-        logger.info(String.format("Delaying repartitioning for [%d] seconds", groupProperties.PARTITION_MIGRATION_DELAY.getLong()));
-        nodeEngine.getExecutionService().schedule(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        lock.lock();
-                        try {
-                            migrationQueue.clear();
-                            if (initialized) {
-                                migrationQueue.add(new RepartitioningTask());
-                            }
-                        } finally {
-                            lock.unlock();
+    @Override
+    public void memberCapabilityUpdate(MemberImpl updatedMember) {
+        updateMemberGroupsSize();
+
+        lock.lock();
+        if (node.isMaster() && node.isActive()) {
+            try {
+                migrationQueue.clear();
+                if (!updatedMember.hasCapability(PARTITION_HOST) && !activeMigrations.isEmpty()) {
+                    for (MigrationInfo migrationInfo : activeMigrations.values()) {
+                        if (updatedMember.getAddress().equals(migrationInfo.getDestination())) {
+                            migrationInfo.invalidate();
                         }
                     }
-                }, groupProperties.PARTITION_MIGRATION_DELAY.getLong(), TimeUnit.SECONDS);
+                }
+
+                if (initialized) {
+                    migrationQueue.add(new RepartitioningTask());
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
     }
 
     public void memberRemoved(final MemberImpl member) {
@@ -526,9 +530,9 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
     }
 
-    private List<Future> firePartitionStateOperation(Collection<MemberImpl> members,
-                                                                        PartitionRuntimeState partitionState,
-                                                                        OperationService operationService) {
+    private List<Future> firePartitionStateOperation(PartitionRuntimeState partitionState,
+                                                     OperationService operationService) {
+        Collection<MemberImpl> members = node.clusterService.getMemberList();
         List<Future> calls = new ArrayList<Future>(members.size());
         for (MemberImpl member : members) {
             if (!member.localMember()) {
