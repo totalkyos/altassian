@@ -523,7 +523,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
             PartitionRuntimeState partitionState = createPartitionState(members);
             OperationService operationService = nodeEngine.getOperationService();
 
-            List<Future> calls = firePartitionStateOperation(members, partitionState, operationService);
+            List<Future> calls = firePartitionStateOperation(partitionState, operationService);
             waitWithDeadline(calls, 3, TimeUnit.SECONDS, partitionStateSyncTimeoutHandler);
         } finally {
             lock.unlock();

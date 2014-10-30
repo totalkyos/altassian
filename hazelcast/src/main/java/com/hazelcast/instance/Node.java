@@ -73,7 +73,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.hazelcast.instance.NodeShutdownHelper.shutdownNodeByFiringEvents;
-import static com.hazelcast.instance.MemberImpl.MemberRole;
 
 public class Node {
 
