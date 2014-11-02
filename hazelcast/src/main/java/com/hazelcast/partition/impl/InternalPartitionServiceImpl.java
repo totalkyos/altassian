@@ -1354,6 +1354,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
     private boolean awaitEmpty(long timeout, TimeUnit timeunit) {
         Collection<MemberImpl> partitionHosts = getPartitionHosts();
         if (partitionHosts.contains(node.getLocalMember()) && partitionHosts.size() == 1) {
+            // If local node is the only partition host then there's no node we can drain the partitions to.
             return false;
         }
 
