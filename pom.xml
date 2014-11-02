@@ -49,7 +49,6 @@
         <!--<maven.compiler.plugin.version>3.1</maven.compiler.plugin.version>-->
         <maven.compiler.plugin.version>2.5.1</maven.compiler.plugin.version>
         <maven.jar.plugin.version>2.4</maven.jar.plugin.version>
-        <maven.resources.plugin.version>2.6</maven.resources.plugin.version>
         <maven.source.plugin.version>2.2.1</maven.source.plugin.version>
         <maven.antrun.plugin.version>1.7</maven.antrun.plugin.version>
         <maven.surefire.plugin.version>2.17</maven.surefire.plugin.version>
@@ -236,7 +235,7 @@
                     </argLine>
                     <groups>com.hazelcast.test.annotation.QuickTest</groups>
                     <excludedGroups>
-                        com.hazelcast.test.annotation.SlowTest,com.hazelcast.test.annotation.ProblematicTest
+                        com.hazelcast.test.annotation.SlowTest,com.hazelcast.test.annotation.NightlyTest
                     </excludedGroups>
                 </configuration>
             </plugin>
@@ -330,7 +329,7 @@
                             <groups>com.hazelcast.test.annotation.QuickTest,com.hazelcast.test.annotation.SlowTest
                             </groups>
                             <excludedGroups>
-                                com.hazelcast.test.annotation.NightlyTest,com.hazelcast.test.annotation.ProblematicTest
+                                com.hazelcast.test.annotation.NightlyTest
                             </excludedGroups>
                         </configuration>
                     </plugin>
@@ -418,7 +417,7 @@
                             <groups>com.hazelcast.test.annotation.QuickTest,com.hazelcast.test.annotation.SlowTest
                             </groups>
                             <excludedGroups>
-                                com.hazelcast.test.annotation.NightlyTest,com.hazelcast.test.annotation.ProblematicTest
+                                com.hazelcast.test.annotation.NightlyTest
                             </excludedGroups>
                         </configuration>
                     </plugin>
@@ -445,8 +444,6 @@
                                 com.hazelcast.test.annotation.QuickTest,com.hazelcast.test.annotation.SlowTest,com.hazelcast.test.annotation.NightlyTest
                             </groups>
 
-                            <!--groups>com.hazelcast.test.annotation.QuickTest,com.hazelcast.test.annotation.SlowTest,com.hazelcast.test.annotation.NightlyTest</groups>
-                            <excludedGroups>com.hazelcast.test.annotation.ProblematicTest</excludedGroups -->
                         </configuration>
                         <executions>
                             <execution>
