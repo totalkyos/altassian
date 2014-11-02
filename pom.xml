@@ -236,7 +236,7 @@
                     </argLine>
                     <groups>com.hazelcast.test.annotation.QuickTest</groups>
                     <excludedGroups>
-                        com.hazelcast.test.annotation.SlowTest,com.hazelcast.test.annotation.ProblematicTest
+                        com.hazelcast.test.annotation.SlowTest,com.hazelcast.test.annotation.NightlyTest
                     </excludedGroups>
                 </configuration>
             </plugin>
@@ -330,7 +330,7 @@
                             <groups>com.hazelcast.test.annotation.QuickTest,com.hazelcast.test.annotation.SlowTest
                             </groups>
                             <excludedGroups>
-                                com.hazelcast.test.annotation.NightlyTest,com.hazelcast.test.annotation.ProblematicTest
+                                com.hazelcast.test.annotation.NightlyTest
                             </excludedGroups>
                         </configuration>
                     </plugin>
@@ -418,7 +418,7 @@
                             <groups>com.hazelcast.test.annotation.QuickTest,com.hazelcast.test.annotation.SlowTest
                             </groups>
                             <excludedGroups>
-                                com.hazelcast.test.annotation.NightlyTest,com.hazelcast.test.annotation.ProblematicTest
+                                com.hazelcast.test.annotation.NightlyTest
                             </excludedGroups>
                         </configuration>
                     </plugin>
@@ -445,8 +445,6 @@
                                 com.hazelcast.test.annotation.QuickTest,com.hazelcast.test.annotation.SlowTest,com.hazelcast.test.annotation.NightlyTest
                             </groups>
 
-                            <!--groups>com.hazelcast.test.annotation.QuickTest,com.hazelcast.test.annotation.SlowTest,com.hazelcast.test.annotation.NightlyTest</groups>
-                            <excludedGroups>com.hazelcast.test.annotation.ProblematicTest</excludedGroups -->
                         </configuration>
                         <executions>
                             <execution>
