@@ -85,8 +85,6 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         EventPublishingService<MigrationEvent, MigrationListener> {
 
     private static final String EXCEPTION_MSG_PARTITION_STATE_SYNC_TIMEOUT = "Partition state sync invocation timed out";
-    private static final ExceptionHandler PARTITION_STATE_SYNC_TIMEOUT_HANDLER =
-            logAllExceptions(EXCEPTION_MSG_PARTITION_STATE_SYNC_TIMEOUT, Level.INFO);
 
     private static final int DEFAULT_PAUSE_MILLIS = 1000;
     private static final int DEFAULT_SLEEP_MILLIS = 10;
@@ -114,6 +112,8 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
     private final AtomicLong lastRepartitionTime = new AtomicLong();
     private final CoalescingDelayedTrigger delayedResumeMigrationTrigger;
 
+    private final ExceptionHandler partitionStateSyncTimeoutHandler;
+
     // can be read and written concurrently...
     private volatile int memberGroupsSize;
 
@@ -132,6 +132,8 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         this.node = node;
         this.nodeEngine = node.nodeEngine;
         this.logger = node.getLogger(InternalPartitionService.class);
+        partitionStateSyncTimeoutHandler =
+                logAllExceptions(logger, EXCEPTION_MSG_PARTITION_STATE_SYNC_TIMEOUT, Level.FINEST);
         this.partitions = new InternalPartitionImpl[partitionCount];
         PartitionListener partitionListener = new LocalPartitionListener(this, node.getThisAddress());
         for (int i = 0; i < partitionCount; i++) {
@@ -210,6 +212,8 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
         executionService.scheduleWithFixedDelay(new SyncReplicaVersionTask(),
                 backupSyncCheckInterval, backupSyncCheckInterval, TimeUnit.SECONDS);
+
+        logger.info("Initialized delayed partition service");
     }
 
     @Override
@@ -511,12 +515,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
             OperationService operationService = nodeEngine.getOperationService();
 
             List<Future> calls = firePartitionStateOperation(partitionState, operationService);
-
-            try {
-                waitWithDeadline(calls, 3, TimeUnit.SECONDS, PARTITION_STATE_SYNC_TIMEOUT_HANDLER);
-            } catch (TimeoutException e) {
-                logger.finest(e);
-            }
+            waitWithDeadline(calls, 3, TimeUnit.SECONDS, partitionStateSyncTimeoutHandler);
         } finally {
             lock.unlock();
         }
@@ -986,10 +985,14 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
     }
 
     private boolean hasOnGoingMigrationMaster(Level level) {
-        Operation operation = new HasOngoingMigration();
         Address masterAddress = node.getMasterAddress();
+        if (masterAddress == null) {
+            return true;
+        }
+        Operation operation = new HasOngoingMigration();
         OperationService operationService = nodeEngine.getOperationService();
-        InvocationBuilder invocationBuilder = operationService.createInvocationBuilder(SERVICE_NAME, operation, masterAddress);
+        InvocationBuilder invocationBuilder = operationService.createInvocationBuilder(SERVICE_NAME, operation,
+                masterAddress);
         Future future = invocationBuilder.setTryCount(100).setTryPauseMillis(100).invoke();
         try {
             return (Boolean) future.get(1, TimeUnit.MINUTES);
@@ -1352,6 +1355,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
     private boolean awaitEmpty(long timeout, TimeUnit timeunit) {
         Collection<MemberImpl> partitionHosts = getPartitionHosts();
         if (partitionHosts.contains(node.getLocalMember()) && partitionHosts.size() == 1) {
+            // If local node is the only partition host then there's no node we can drain the partitions to.
             return false;
         }
 
