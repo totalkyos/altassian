@@ -133,7 +133,7 @@ public interface PartitionService {
      * @param timeout The time to wait for the migration before returning.
      * @param timeunit The unit in which the timeout was provided.
      * @return true if the local member owns no partition. false otherwise.
-     * @since 3.3-atlassian-3
+     * @since 3.3-atlassian-5
      */
     boolean drain(long timeout, TimeUnit timeunit);
 
