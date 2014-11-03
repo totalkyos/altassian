@@ -139,6 +139,8 @@ public interface InternalPartitionService extends CoreService {
 
     boolean prepareToSafeShutdown(long timeout, TimeUnit seconds);
 
+    boolean drain(long timeout, TimeUnit timeunit);
+
     /**
      * Query and return if this member in a safe state or not.
      * This method just checks for a safe state, it doesn't force this member to be in a safe state.
