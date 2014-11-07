@@ -116,7 +116,7 @@ final class BasicOperationService implements InternalOperationService {
     private static final double REMOTE_OPERATION_STATISTICS_THRESHOLD = 0.01;
     private static final int STATISTICS_SPIN_MAX = 3;
 
-    final ConcurrentMap<Long, BasicInvocation> invocations;
+    private final ConcurrentMap<Long, BasicInvocation> invocations;
     final BasicOperationScheduler scheduler;
     private final AtomicLong executedOperationsCount = new AtomicLong();
     private boolean doCountRemoteOperations = false;
@@ -873,10 +873,6 @@ final class BasicOperationService implements InternalOperationService {
 
             RemoteCallKey callKey = null;
             try {
-                if (timeout(op)) {
-                    return;
-                }
-
                 callKey = beforeCallExecution(op);
 
                 ensureNoPartitionProblems(op);
@@ -909,16 +905,6 @@ final class BasicOperationService implements InternalOperationService {
                     nodeEngine.waitNotifyService.await(waitSupport);
                     return true;
                 }
-            }
-            return false;
-        }
-
-        private boolean timeout(Operation op) {
-            if (isCallTimedOut(op)) {
-                Object response = new CallTimeoutException(
-                        op.getClass().getName(), op.getInvocationTime(), op.getCallTimeout());
-                op.getResponseHandler().sendResponse(response);
-                return true;
             }
             return false;
         }
