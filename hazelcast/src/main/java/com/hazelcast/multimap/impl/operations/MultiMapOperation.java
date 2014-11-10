@@ -60,6 +60,11 @@ public abstract class MultiMapOperation extends Operation
     public void beforeRun() throws Exception {
     }
 
+    @Override
+    public boolean isIdempotent() {
+        return true;
+    }
+
     public boolean returnsResponse() {
         return true;
     }

@@ -74,6 +74,11 @@ public abstract class Operation implements DataSerializable, RemotePropagatable<
     // runs after backups, before wait-notify
     public abstract void afterRun() throws Exception;
 
+    // should be overridden to return true if the operation is safe to retry
+    public boolean isIdempotent() {
+        return false;
+    }
+
     public abstract boolean returnsResponse();
 
     public abstract Object getResponse();

@@ -253,12 +253,24 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
 
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "VO_VOLATILE_INCREMENT",
             justification = "We have the guarantee that only a single thread at any given time can change the volatile field")
+    private void incrementInvokeCount() {
+        invokeCount++;
+    }
+
+    @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "VO_VOLATILE_INCREMENT",
+            justification = "We have the guarantee that only a single thread at any given time can change the volatile field")
+    public void decrementInvokeCount() {
+        if (--invokeCount <= 0) {
+            operationService.deregisterInvocation(this);
+        }
+    }
+
     private void doInvoke() {
         if (!engineActive()) {
             return;
         }
 
-        invokeCount++;
+        incrementInvokeCount();
 
         if (!initInvocationTarget()) {
             return;
@@ -293,7 +305,7 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
         operationService.registerInvocation(this);
         boolean sent = operationService.send(op, invTarget);
         if (!sent) {
-            operationService.deregisterInvocation(this);
+            decrementInvokeCount();
             notify(new RetryableIOException("Packet not send to -> " + invTarget));
         }
     }
@@ -400,7 +412,7 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
         Object response = resolveResponse(obj);
 
         if (response == RETRY_RESPONSE) {
-            handleRetryResponse();
+            retry();
             return;
         }
 
@@ -427,7 +439,7 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
         invocationFuture.set(WAIT_RESPONSE);
     }
 
-    private void handleRetryResponse() {
+    public void retry() {
         if (invocationFuture.interrupted) {
             invocationFuture.set(INTERRUPTED_RESPONSE);
         } else {

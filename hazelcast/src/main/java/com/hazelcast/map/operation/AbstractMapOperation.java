@@ -48,6 +48,11 @@ public abstract class AbstractMapOperation extends AbstractNamedOperation {
     }
 
     @Override
+    public boolean isIdempotent() {
+        return true;
+    }
+
+    @Override
     public boolean returnsResponse() {
         return true;
     }

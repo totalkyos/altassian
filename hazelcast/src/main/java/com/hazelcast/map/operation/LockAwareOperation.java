@@ -40,6 +40,11 @@ public abstract class LockAwareOperation extends KeyBasedMapOperation implements
     protected LockAwareOperation() {
     }
 
+    @Override
+    public boolean isIdempotent() {
+        return true;
+    }
+
     public boolean shouldWait() {
         return !recordStore.canAcquireLock(dataKey, getCallerUuid(), getThreadId());
     }

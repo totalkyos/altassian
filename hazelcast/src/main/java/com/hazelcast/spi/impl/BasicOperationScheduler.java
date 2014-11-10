@@ -82,6 +82,8 @@ public final class BasicOperationScheduler {
     private final ResponseThread[] responseThreads;
     private final BlockingQueue<Packet> responseWorkQueue = new LinkedBlockingQueue<Packet>();
 
+    private final TimeoutThread timeoutThread;
+
     private volatile boolean shutdown;
 
     //The trigger is used when a priority message is send and offered to the operation-thread priority queue.
@@ -98,7 +100,8 @@ public final class BasicOperationScheduler {
         }
     };
 
-    public BasicOperationScheduler(Node node,
+    public BasicOperationScheduler(BasicOperationService operationService,
+                                   Node node,
                                    ExecutionService executionService,
                                    BasicDispatcher dispatcher) {
         this.executionService = executionService;
@@ -114,6 +117,10 @@ public final class BasicOperationScheduler {
 
         this.responseThreads = new ResponseThread[getResponseThreadCount()];
         initResponseThreads(responseThreads, new ResponseThreadFactory());
+
+        int timeoutIntervalMillis = node.getGroupProperties().OPERATION_CALL_TIMEOUT_INTERVAL_MILLIS.getInteger();
+        this.timeoutThread = new TimeoutThread(operationService, timeoutIntervalMillis);
+        this.timeoutThread.start();
 
         logger.info("Starting with " + genericOperationThreads.length + " generic operation threads, "
                 + partitionOperationThreads.length + " partition operation threads and"
@@ -529,6 +536,41 @@ public final class BasicOperationScheduler {
                 dispatcher.dispatch(task);
             } catch (Exception e) {
                 logger.severe("Failed to process task: " + task + " on partitionThread:" + getName());
+            }
+        }
+    }
+
+    private class TimeoutThread extends Thread {
+        private BasicOperationService operationService;
+        private int timeoutIntervalMillis;
+
+        public TimeoutThread(BasicOperationService operationService, int timeoutIntervalMillis) {
+            super(node.threadGroup, "timeout");
+            this.operationService = operationService;
+            this.timeoutIntervalMillis = timeoutIntervalMillis;
+        }
+
+        public void run() {
+            try {
+                doRun();
+            } catch (OutOfMemoryError e) {
+                onOutOfMemory(e);
+            } catch (Throwable t) {
+                logger.severe(t);
+            }
+        }
+
+        private void doRun() {
+            for (;;) {
+                try {
+                    Thread.sleep(timeoutIntervalMillis);
+                    operationService.timeoutInvocations();
+                } catch (InterruptedException e) {
+                    if (shutdown) {
+                        return;
+                    }
+                    continue;
+                }
             }
         }
     }

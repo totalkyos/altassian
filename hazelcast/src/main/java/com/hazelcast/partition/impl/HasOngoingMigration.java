@@ -44,6 +44,11 @@ public final class HasOngoingMigration extends AbstractOperation {
     }
 
     @Override
+    public boolean isIdempotent() {
+        return true;
+    }
+
+    @Override
     public boolean returnsResponse() {
         return true;
     }

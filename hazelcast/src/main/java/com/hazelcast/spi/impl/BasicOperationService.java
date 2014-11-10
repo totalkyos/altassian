@@ -155,7 +155,7 @@ final class BasicOperationService implements InternalOperationService {
                 new ConcurrentHashMap<RemoteCallKey, RemoteCallKey>(INITIAL_CAPACITY, LOAD_FACTOR, concurrencyLevel);
         this.invocations = new ConcurrentHashMap<Long, BasicInvocation>(INITIAL_CAPACITY, LOAD_FACTOR, concurrencyLevel);
         this.executedRemoteOperationsByName = new ConcurrentHashMap<String, Long>();
-        this.scheduler = new BasicOperationScheduler(node, executionService, new BasicDispatcherImpl());
+        this.scheduler = new BasicOperationScheduler(this, node, executionService, new BasicDispatcherImpl());
         this.operationHandler = new OperationHandler();
         this.operationBackupHandler = new OperationBackupHandler();
         this.operationPacketHandler = new OperationPacketHandler();
@@ -463,6 +463,18 @@ final class BasicOperationService implements InternalOperationService {
                 }
             }
         }, SCHEDULE_DELAY, TimeUnit.MILLISECONDS);
+    }
+
+    public void timeoutInvocations() {
+        Iterator<BasicInvocation> iter = invocations.values().iterator();
+        while (iter.hasNext()) {
+            BasicInvocation invocation = iter.next();
+            Operation op = invocation.op;
+            if (op.isIdempotent() && isCallTimedOut(op)) {
+                invocation.retry();
+            }
+            // TODO: Also expire invocations that exceed some TTL
+        }
     }
 
     @Override
