@@ -263,7 +263,7 @@ class WaitNotifyServiceImpl implements WaitNotifyService {
         }
 
         public boolean needsInvalidation() {
-            return isExpired() || isCancelled() || isCallTimedOut();
+            return isExpired() || isCancelled();
         }
 
         public boolean isExpired() {
@@ -272,15 +272,6 @@ class WaitNotifyServiceImpl implements WaitNotifyService {
 
         public boolean isCancelled() {
             return error != null;
-        }
-
-        public boolean isCallTimedOut() {
-            final NodeEngineImpl nodeEngine = (NodeEngineImpl) getNodeEngine();
-            if (nodeEngine.operationService.isCallTimedOut(op)) {
-                cancel(new CallTimeoutException(op.getClass().getName(), op.getInvocationTime(), op.getCallTimeout()));
-                return true;
-            }
-            return false;
         }
 
         public boolean shouldWait() {
