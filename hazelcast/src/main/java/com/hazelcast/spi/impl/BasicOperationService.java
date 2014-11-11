@@ -852,6 +852,10 @@ final class BasicOperationService implements InternalOperationService {
          * Runs operation in calling thread.
          */
         private void handle(Operation op) {
+            if (op.getInterrupted()) {
+                return;
+            }
+
             executedOperationsCount.incrementAndGet();
 
             RemoteCallKey callKey = null;
