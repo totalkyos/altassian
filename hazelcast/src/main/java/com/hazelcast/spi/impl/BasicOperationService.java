@@ -49,7 +49,6 @@ import com.hazelcast.spi.ResponseHandler;
 import com.hazelcast.spi.UrgentSystemOperation;
 import com.hazelcast.spi.WaitSupport;
 import com.hazelcast.spi.annotation.PrivateApi;
-import com.hazelcast.spi.exception.CallTimeoutException;
 import com.hazelcast.spi.exception.CallerNotMemberException;
 import com.hazelcast.spi.exception.PartitionMigratingException;
 import com.hazelcast.spi.exception.WrongTargetException;
@@ -316,22 +315,6 @@ final class BasicOperationService implements InternalOperationService {
     }
 
     // =============================== processing operation  ===============================
-
-    @PrivateApi
-    public boolean isCallTimedOut(Operation op) {
-        if (op.returnsResponse() && op.getCallId() != 0) {
-            final long callTimeout = op.getCallTimeout();
-            final long invocationTime = op.getInvocationTime();
-            final long expireTime = invocationTime + callTimeout;
-            if (expireTime > 0 && expireTime < Long.MAX_VALUE) {
-                final long now = nodeEngine.getClusterTime();
-                if (expireTime < now) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
 
     @Override
     public Map<Integer, Object> invokeOnAllPartitions(String serviceName, OperationFactory operationFactory) throws Exception {
