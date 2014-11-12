@@ -1009,7 +1009,7 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
                 logger.info(String.format("Updated member [%s] capabilities to [%s]", member, newCapabilities));
 
                 // Let other members know they should update their members
-                invokeOnOthers(new MemberCapabilityUpdateRequestOperation(member.getUuid(), newCapabilities));
+                notifyCapabilityUpdate(member.getUuid(), newCapabilities);
             }
         } else {
             logger.info(String.format("Cannot update member [%s] capabilities to [%s]", member, newCapabilities));
@@ -1020,10 +1020,10 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
         return newCapabilities.contains(PARTITION_HOST) || getMemberList(PARTITION_HOST).size() > 1;
     }
 
-    private void invokeOnOthers(Operation operation) {
+    private void notifyCapabilityUpdate(String uuid, Set<Capability> capabilities) {
         for (MemberImpl member : getMemberList()) {
             if (!member.localMember()) {
-                invokeClusterOperation(operation, member.getAddress());
+                invokeClusterOperation(new MemberCapabilityChangedOperation(uuid, capabilities), member.getAddress());
             }
         }
     }
