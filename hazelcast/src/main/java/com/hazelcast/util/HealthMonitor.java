@@ -17,6 +17,7 @@
 package com.hazelcast.util;
 
 import com.hazelcast.client.impl.ClientEngineImpl;
+import com.hazelcast.cluster.ClusterServiceImpl;
 import com.hazelcast.concurrent.lock.LockService;
 import com.hazelcast.instance.HazelcastInstanceImpl;
 import com.hazelcast.instance.Node;
@@ -72,6 +73,7 @@ public class HealthMonitor extends Thread {
     private final Runtime runtime;
     private final HealthMonitorLevel logLevel;
     private final int delaySeconds;
+    private final ClusterServiceImpl clusterService;
     private final ExecutionService executionService;
     private final EventService eventService;
     private final LockService lockService;
@@ -91,6 +93,7 @@ public class HealthMonitor extends Thread {
         this.logLevel = logLevel;
         this.delaySeconds = delaySeconds;
         this.threadMxBean = ManagementFactory.getThreadMXBean();
+        this.clusterService = node.getClusterService();
         this.executionService = node.nodeEngine.getExecutionService();
         this.eventService = node.nodeEngine.getEventService();
         this.lockService = node.nodeEngine.getSharedService(LockService.SERVICE_NAME);
@@ -151,6 +154,7 @@ public class HealthMonitor extends Thread {
         private final double systemCpuLoad;
         private final int threadCount;
         private final int peakThreadCount;
+        private final long clusterTimeDiff;
         private final int asyncExecutorQueueSize;
         private final int clientExecutorQueueSize;
         private final int queryExecutorQueueSize;
@@ -186,6 +190,7 @@ public class HealthMonitor extends Thread {
             systemCpuLoad = readLongAttribute("SystemCpuLoad", -1L);
             threadCount = threadMxBean.getThreadCount();
             peakThreadCount = threadMxBean.getPeakThreadCount();
+            clusterTimeDiff = clusterService.getClusterTimeDiff();
             asyncExecutorQueueSize = executionService.getExecutor(ExecutionService.ASYNC_EXECUTOR).getQueueSize();
             clientExecutorQueueSize = executionService.getExecutor(ExecutionService.CLIENT_EXECUTOR).getQueueSize();
             queryExecutorQueueSize = executionService.getExecutor(ExecutionService.QUERY_EXECUTOR).getQueueSize();
@@ -263,6 +268,7 @@ public class HealthMonitor extends Thread {
             sb.append("load.systemAverage=").append(format("%.2f", systemLoadAverage)).append("%, ");
             sb.append("thread.count=").append(threadCount).append(", ");
             sb.append("thread.peakCount=").append(peakThreadCount).append(", ");
+            sb.append("cluster.timeDiff=").append(clusterTimeDiff).append(", ");
             sb.append("event.q.size=").append(eventQueueSize).append(", ");
             sb.append("executor.q.async.size=").append(asyncExecutorQueueSize).append(", ");
             sb.append("executor.q.client.size=").append(clientExecutorQueueSize).append(", ");
