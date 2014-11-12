@@ -1304,13 +1304,15 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
     public void setMasterTime(long masterTime) {
         long diff = masterTime - Clock.currentTimeMillis();
         if (Math.abs(diff) < Math.abs(clusterTimeDiff)) {
+            logger.finest("Setting cluster time diff to " + diff + "ms, previous value " + clusterTimeDiff + "ms.");
             this.clusterTimeDiff = diff;
+        } else {
+            logger.finest("Not setting cluster time diff to " + diff + "ms as current value " + clusterTimeDiff + "ms seems better.");
         }
     }
 
-    //todo: remove since unused?
-    public long getClusterTimeFor(long localTime) {
-        return localTime + ((clusterTimeDiff == Long.MAX_VALUE) ? 0 : clusterTimeDiff);
+    public long getClusterTimeDiff() {
+        return (clusterTimeDiff == Long.MAX_VALUE) ? 0 : clusterTimeDiff;
     }
 
     public String addMembershipListener(MembershipListener listener) {
