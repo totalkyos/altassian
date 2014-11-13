@@ -484,7 +484,6 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
             waitTimeout -= callTimeout;
             op.setWaitTimeout(waitTimeout);
         }
-        invokeCount--;
         return RETRY_RESPONSE;
     }
 

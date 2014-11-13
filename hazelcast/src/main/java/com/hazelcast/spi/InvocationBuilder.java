@@ -41,7 +41,7 @@ public abstract class InvocationBuilder {
     /**
      * Default try count.
      */
-    public static final int DEFAULT_TRY_COUNT = 250;
+    public static final int DEFAULT_TRY_COUNT = 50;
 
     /**
      * Default try pause in millis. So if a call is retried, then perhaps a delay is needed.

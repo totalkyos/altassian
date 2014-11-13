@@ -31,4 +31,11 @@ public class CallTimeoutException extends RetryableHazelcastException {
     public CallTimeoutException(String opName, long invocationTime, long timeout) {
         super("Call timed out for " + opName + ", call-time: " + invocationTime + ", timeout: " + timeout);
     }
+
+    @Override
+    public Throwable fillInStackTrace() {
+        // CallTimeoutExceptions are used as flags over the wire and never have useful stack traces so we avoid the
+        // serialization cost
+        return this;
+    }
 }
