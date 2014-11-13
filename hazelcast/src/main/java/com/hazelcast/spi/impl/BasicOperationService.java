@@ -928,15 +928,15 @@ final class BasicOperationService implements InternalOperationService {
                 return;
             }
 
-            countProcessedOperation(op);
-            if (isCallTimedOut(op)) {
-                logger.warning("Processing expired operation: " + op.toString());
-            }
-
             executedOperationsCount.incrementAndGet();
 
             RemoteCallKey callKey = null;
             try {
+                if (isCallTimedOut(op)) {
+                    logger.warning("Processing expired operation: " + op.toString());
+                }
+                countProcessedOperation(op);
+
                 callKey = beforeCallExecution(op);
 
                 ensureNoPartitionProblems(op);
