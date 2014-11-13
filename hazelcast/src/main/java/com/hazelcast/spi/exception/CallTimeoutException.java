@@ -38,5 +38,4 @@ public class CallTimeoutException extends RetryableHazelcastException {
         // serialization cost
         return this;
     }
-
 }
