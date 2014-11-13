@@ -37,7 +37,6 @@ import com.hazelcast.spi.NodeEngine;
 import com.hazelcast.test.HazelcastParallelClassRunner;
 import com.hazelcast.test.HazelcastTestSupport;
 import com.hazelcast.test.TestHazelcastInstanceFactory;
-import com.hazelcast.test.annotation.ProblematicTest;
 import com.hazelcast.test.annotation.QuickTest;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -347,7 +346,6 @@ public class ExecutorServiceTest extends HazelcastTestSupport {
     }
 
     @Test
-    @Category(ProblematicTest.class)
     public void testSubmitToKeyOwnerCallable() throws Exception {
         final int k = simpleTestNodeCount;
         TestHazelcastInstanceFactory factory = createHazelcastInstanceFactory(k);
@@ -385,7 +383,6 @@ public class ExecutorServiceTest extends HazelcastTestSupport {
     }
 
     @Test
-    @Category(ProblematicTest.class)
     public void testSubmitToMemberCallable() throws ExecutionException, InterruptedException, TimeoutException {
         final int k = simpleTestNodeCount;
         TestHazelcastInstanceFactory factory = createHazelcastInstanceFactory(k);
@@ -1204,7 +1201,7 @@ public class ExecutorServiceTest extends HazelcastTestSupport {
             }
         });
 
-        latch1.await(30, TimeUnit.SECONDS);
+        assertOpenEventually(latch1);
 
         final AtomicReference reference = new AtomicReference();
         final ICompletableFuture completableFuture = es.asCompletableFuture(future);
@@ -1222,7 +1219,7 @@ public class ExecutorServiceTest extends HazelcastTestSupport {
             }
         });
 
-        latch2.await(30, TimeUnit.SECONDS);
+        assertOpenEventually(latch2);
         assertEquals("success", reference.get());
     }
 
@@ -1407,14 +1404,14 @@ public class ExecutorServiceTest extends HazelcastTestSupport {
                 latch.countDown();
             }
         });
-        assertTrue(latch.await(10,TimeUnit.SECONDS));
+        assertTrue(latch.await(10, TimeUnit.SECONDS));
     }
 
 
     public static class FailingTestTask implements Callable<String>, Serializable {
 
         public String call() throws Exception {
-            throw  new IllegalStateException();
+            throw new IllegalStateException();
         }
     }
 

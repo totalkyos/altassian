@@ -108,7 +108,6 @@ public class GroupProperties {
     public static final String PROP_MC_URL_CHANGE_ENABLED = "hazelcast.mc.url.change.enabled";
     public static final String PROP_CONNECTION_MONITOR_INTERVAL = "hazelcast.connection.monitor.interval";
     public static final String PROP_CONNECTION_MONITOR_MAX_FAULTS = "hazelcast.connection.monitor.max.faults";
-    public static final String PROP_PARTITION_MIGRATION_DELAY = "hazelcast.partition.migration.delay";
     public static final String PROP_PARTITION_MIGRATION_INTERVAL = "hazelcast.partition.migration.interval";
     public static final String PROP_PARTITION_MIGRATION_TIMEOUT = "hazelcast.partition.migration.timeout";
     public static final String PROP_PARTITION_MIGRATION_ZIP_ENABLED = "hazelcast.partition.migration.zip.enabled";
@@ -239,8 +238,6 @@ public class GroupProperties {
 
     public final GroupProperty CONNECTION_MONITOR_MAX_FAULTS;
 
-    public final GroupProperty PARTITION_MIGRATION_DELAY;
-
     public final GroupProperty PARTITION_MIGRATION_INTERVAL;
 
     public final GroupProperty PARTITION_MIGRATION_TIMEOUT;
@@ -290,7 +287,7 @@ public class GroupProperties {
         //-1 means that the value is worked out dynamically.
         PARTITION_OPERATION_THREAD_COUNT = new GroupProperty(config, PROP_PARTITION_OPERATION_THREAD_COUNT, "-1");
         GENERIC_OPERATION_THREAD_COUNT = new GroupProperty(config, PROP_GENERIC_OPERATION_THREAD_COUNT, "-1");
-        RESPONSE_THREAD_COUNT = new GroupProperty(config, PROP_RESPONSE_THREAD_COUNT, "-1");
+        RESPONSE_THREAD_COUNT = new GroupProperty(config, PROP_RESPONSE_THREAD_COUNT, "1");
         EVENT_THREAD_COUNT = new GroupProperty(config, PROP_EVENT_THREAD_COUNT, "5");
         EVENT_QUEUE_CAPACITY = new GroupProperty(config, PROP_EVENT_QUEUE_CAPACITY, "1000000");
         EVENT_QUEUE_TIMEOUT_MILLIS = new GroupProperty(config, PROP_EVENT_QUEUE_TIMEOUT_MILLIS, "250");
@@ -339,7 +336,6 @@ public class GroupProperties {
         MC_URL_CHANGE_ENABLED = new GroupProperty(config, PROP_MC_URL_CHANGE_ENABLED, "true");
         CONNECTION_MONITOR_INTERVAL = new GroupProperty(config, PROP_CONNECTION_MONITOR_INTERVAL, "100");
         CONNECTION_MONITOR_MAX_FAULTS = new GroupProperty(config, PROP_CONNECTION_MONITOR_MAX_FAULTS, "3");
-        PARTITION_MIGRATION_DELAY = new GroupProperty(config, PROP_PARTITION_MIGRATION_DELAY, "0");
         PARTITION_MIGRATION_INTERVAL = new GroupProperty(config, PROP_PARTITION_MIGRATION_INTERVAL, "0");
         PARTITION_MIGRATION_TIMEOUT = new GroupProperty(config, PROP_PARTITION_MIGRATION_TIMEOUT, "300");
         PARTITION_MIGRATION_ZIP_ENABLED = new GroupProperty(config, PROP_PARTITION_MIGRATION_ZIP_ENABLED, "true");

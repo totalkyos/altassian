@@ -26,6 +26,7 @@ import com.hazelcast.nio.serialization.IdentifiedDataSerializable;
 import com.hazelcast.partition.InternalPartition;
 import com.hazelcast.partition.InternalPartitionService;
 import com.hazelcast.partition.ReplicaErrorLogger;
+import com.hazelcast.spi.BackupAwareOperation;
 import com.hazelcast.spi.BackupOperation;
 import com.hazelcast.spi.NodeEngine;
 import com.hazelcast.spi.Operation;
@@ -45,18 +46,24 @@ final class Backup extends Operation implements BackupOperation, IdentifiedDataS
 
     private Operation backupOp;
     private boolean valid = true;
+    private BackupAwareOperation parentOp;
 
     Backup() {
     }
 
-    Backup(Data backupOp, Address originalCaller, long[] replicaVersions, boolean sync) {
+    Backup(Data backupOp, Address originalCaller, long[] replicaVersions, boolean sync, BackupAwareOperation parentOp) {
         this.backupOpData = backupOp;
         this.originalCaller = originalCaller;
         this.sync = sync;
         this.replicaVersions = replicaVersions;
+        this.parentOp = parentOp;
         if (sync && originalCaller == null) {
             throw new IllegalArgumentException("Sync backup requires original caller address, Op: " + backupOp);
         }
+    }
+
+    public BackupAwareOperation getParentOp() {
+        return parentOp;
     }
 
     @Override

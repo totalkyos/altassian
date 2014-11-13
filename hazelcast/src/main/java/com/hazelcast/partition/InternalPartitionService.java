@@ -111,6 +111,10 @@ public interface InternalPartitionService extends CoreService {
 
     List<Integer> getMemberPartitions(Address target);
 
+    /**
+     * Gets member partition IDs. Blocks until partitions are assigned.
+     * @return map of member address to partition Ids
+     **/
     Map<Address, List<Integer>> getMemberPartitionsMap();
 
     int getMemberGroupsSize();
@@ -134,6 +138,8 @@ public interface InternalPartitionService extends CoreService {
     void memberRemoved(MemberImpl deadMember);
 
     boolean prepareToSafeShutdown(long timeout, TimeUnit seconds);
+
+    boolean drain(long timeout, TimeUnit timeunit);
 
     /**
      * Query and return if this member in a safe state or not.

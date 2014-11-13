@@ -16,11 +16,7 @@
 
 package com.hazelcast.instance;
 
-import com.hazelcast.cluster.ClusterDataSerializerHook;
-import com.hazelcast.cluster.ClusterService;
-import com.hazelcast.cluster.MemberAttributeChangedOperation;
-import com.hazelcast.cluster.MemberAttributeOperationType;
-import com.hazelcast.cluster.MemberCapabilityChangedOperation;
+import com.hazelcast.cluster.*;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.HazelcastInstanceAware;
 import com.hazelcast.core.Member;
@@ -146,7 +142,7 @@ public final class MemberImpl implements Member, HazelcastInstanceAware, Identif
 
     @Override
     public void updateCapabilities(Set<Capability> capabilities) {
-        invokeOnMaster(new MemberCapabilityChangedOperation(getUuid(), capabilities));
+        invokeOnMaster(new MemberCapabilityUpdateRequestOperation(getUuid(), capabilities));
     }
 
     @Override

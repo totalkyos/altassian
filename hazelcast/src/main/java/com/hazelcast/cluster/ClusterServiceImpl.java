@@ -97,9 +97,6 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
 
     public static final String SERVICE_NAME = "hz:core:clusterService";
 
-    private static final ExceptionHandler WHILE_FINALIZE_JOINS_EXCEPTION_HANDLER =
-            logAllExceptions("While waiting finalize join calls...", Level.WARNING);
-
     private static final String EXECUTOR_NAME = "hz:cluster";
     private static final int HEARTBEAT_INTERVAL = 500;
     private static final int PING_INTERVAL = 5000;
@@ -147,12 +144,16 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
 
     private final ConcurrentMap<MemberImpl, Long> masterConfirmationTimes = new ConcurrentHashMap<MemberImpl, Long>();
 
+    private final ExceptionHandler whileFinalizeJoinsExceptionHandler;
+
     private volatile long clusterTimeDiff = Long.MAX_VALUE;
 
     public ClusterServiceImpl(final Node node) {
         this.node = node;
         nodeEngine = node.nodeEngine;
         logger = node.getLogger(ClusterService.class.getName());
+        whileFinalizeJoinsExceptionHandler =
+                logAllExceptions(logger, "While waiting finalize join calls...", Level.WARNING);
         thisAddress = node.getThisAddress();
         thisMember = node.getLocalMember();
         setMembers(thisMember);
@@ -898,12 +899,8 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
                     }
                 }
                 updateMembers(memberInfos);
-
-                try {
-                    waitWithDeadline(calls, 10, TimeUnit.SECONDS, WHILE_FINALIZE_JOINS_EXCEPTION_HANDLER);
-                } catch (TimeoutException e) {
-                    logger.warning("While waiting finalize join calls...", e);
-                }
+                waitWithDeadline(calls, Math.min(calls.size(), FinalizeJoinOperation.FINALIZE_JOIN_MAX_TIMEOUT),
+                        TimeUnit.SECONDS, whileFinalizeJoinsExceptionHandler);
             } finally {
                 node.getPartitionService().resumeMigration();
             }
@@ -1012,7 +1009,7 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
                 logger.info(String.format("Updated member [%s] capabilities to [%s]", member, newCapabilities));
 
                 // Let other members know they should update their members
-                invokeOnOthers(new MemberCapabilityChangedOperation(member.getUuid(), newCapabilities));
+                notifyCapabilityUpdate(member.getUuid(), newCapabilities);
             }
         } else {
             logger.info(String.format("Cannot update member [%s] capabilities to [%s]", member, newCapabilities));
@@ -1023,10 +1020,10 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
         return newCapabilities.contains(PARTITION_HOST) || getMemberList(PARTITION_HOST).size() > 1;
     }
 
-    private void invokeOnOthers(Operation operation) {
+    private void notifyCapabilityUpdate(String uuid, Set<Capability> capabilities) {
         for (MemberImpl member : getMemberList()) {
             if (!member.localMember()) {
-                invokeClusterOperation(operation, member.getAddress());
+                invokeClusterOperation(new MemberCapabilityChangedOperation(uuid, capabilities), member.getAddress());
             }
         }
     }
@@ -1307,13 +1304,15 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
     public void setMasterTime(long masterTime) {
         long diff = masterTime - Clock.currentTimeMillis();
         if (Math.abs(diff) < Math.abs(clusterTimeDiff)) {
+            logger.finest("Setting cluster time diff to " + diff + "ms, previous value " + clusterTimeDiff + "ms.");
             this.clusterTimeDiff = diff;
+        } else {
+            logger.finest("Not setting cluster time diff to " + diff + "ms as current value " + clusterTimeDiff + "ms seems better.");
         }
     }
 
-    //todo: remove since unused?
-    public long getClusterTimeFor(long localTime) {
-        return localTime + ((clusterTimeDiff == Long.MAX_VALUE) ? 0 : clusterTimeDiff);
+    public long getClusterTimeDiff() {
+        return (clusterTimeDiff == Long.MAX_VALUE) ? 0 : clusterTimeDiff;
     }
 
     public String addMembershipListener(MembershipListener listener) {

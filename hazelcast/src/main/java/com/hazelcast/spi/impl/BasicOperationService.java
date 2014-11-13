@@ -49,7 +49,6 @@ import com.hazelcast.spi.ResponseHandler;
 import com.hazelcast.spi.UrgentSystemOperation;
 import com.hazelcast.spi.WaitSupport;
 import com.hazelcast.spi.annotation.PrivateApi;
-import com.hazelcast.spi.exception.CallTimeoutException;
 import com.hazelcast.spi.exception.CallerNotMemberException;
 import com.hazelcast.spi.exception.PartitionMigratingException;
 import com.hazelcast.spi.exception.WrongTargetException;
@@ -113,13 +112,16 @@ final class BasicOperationService implements InternalOperationService {
     private static final int CORE_SIZE_CHECK = 8;
     private static final int CORE_SIZE_FACTOR = 4;
     private static final int CONCURRENCY_LEVEL = 16;
-    private static final double REMOTE_OPERATION_STATISTICS_THRESHOLD = 0.05;
+    private static final double REMOTE_OPERATION_STATISTICS_THRESHOLD = 0.01;
     private static final int STATISTICS_SPIN_MAX = 3;
 
-    final ConcurrentMap<Long, BasicInvocation> invocations;
+    private final ConcurrentMap<Long, BasicInvocation> invocations;
     final BasicOperationScheduler scheduler;
     private final AtomicLong executedOperationsCount = new AtomicLong();
     private boolean doCountRemoteOperations;
+    private final AtomicLong processedOperationsCount = new AtomicLong();
+    private final AtomicLong processedOperationsLatency = new AtomicLong();
+    private final AtomicLong worstProcessedOperationLatency = new AtomicLong();
     private final AtomicLong executedRemoteOperationsCount = new AtomicLong();
     private final AtomicLong remoteOperationSerializationTime = new AtomicLong();
     private final AtomicLong worstRemoteOperationSerializationTime = new AtomicLong();
@@ -233,6 +235,14 @@ final class BasicOperationService implements InternalOperationService {
         if (appendAndResetNanos(sb, worstRemoteOperationSerializationTime, "worst", worstOperation)) {
             worstOperation = null;
         }
+
+        sb.append(", ");
+        long count = appendAndClear(sb, processedOperationsCount, "processed");
+        if (count != 0) {
+            appendAndClearAverageMillis(sb, processedOperationsLatency, "latency", count);
+            appendAndResetMillis(sb, worstProcessedOperationLatency, "worst");
+        }
+
         return sb.toString();
     }
 
@@ -527,40 +537,93 @@ final class BasicOperationService implements InternalOperationService {
         return value;
     }
 
+    // Convenience function for dumping an average counter and clearing it in a thread safe way.
+    private void appendAndClearAverageMillis(StringBuilder sb, AtomicLong counter, String name, long divisor) {
+        long value = counter.get();
+        sb.append(name + "=").append(value / divisor).append("ms, ");
+        counter.addAndGet(-value);
+    }
+
     // Convenience function for dumping a nanosecond counter and clearing it in a thread safe way.
     private void appendAndClearNanos(StringBuilder sb, AtomicLong counter, String name) {
         long value = getAndClear(counter);
         sb.append(name + "=").append(value / 1000000.0).append("ms, ");
     }
 
-    // Convenience function for dumping a nanosecond latch plus associated data, and resetting in a thread safe way.
+    // Convenience function for dumping a latch and resetting in a thread safe way.
     // The latch is assumed to track the "worst" value of some statistic in some time window, so that if the latch is
     // modified by another thread it must be with another even "worse" value in the next time window - so the latch is
     // not reset.  Returns true if the latch was reset, or false if not.
-    private boolean appendAndResetNanos(StringBuilder sb, AtomicLong latch, String name, Object obj) {
+    private boolean appendAndReset(StringBuilder sb, AtomicLong latch, String name, Object obj, double divisor) {
         long value = latch.get();
-        sb.append(name + "=").append(value / 1000000.0).append("ms");
+        sb.append(name + "=").append(value / divisor).append("ms");
         if (obj != null) {
             sb.append(" - ").append(obj.toString());
         }
         return latch.compareAndSet(value, 0L);
     }
 
-    // Record various statistics for an Operation.
-    private void countRemoteOperation(Operation op, long time, int bufferSize) {
-        if (!doCountRemoteOperations) {
-            return;
-        }
-        executedRemoteOperationsCount.incrementAndGet();
+    // Convenience function for dumping a millisecond latch, and resetting in a thread safe way.
+    private boolean appendAndResetMillis(StringBuilder sb, AtomicLong latch, String name) {
+        return appendAndReset(sb, latch, name, null, 1.0);
+    }
 
+    // Convenience function for dumping a nanosecond latch plus associated data, and resetting in a thread safe way.
+    private boolean appendAndResetNanos(StringBuilder sb, AtomicLong latch, String name, Object obj) {
+        return appendAndReset(sb, latch, name, obj, 1000000.0);
+    }
+
+    private static String getNameOfOperation(Operation op) {
         String name = op.getClass().getSimpleName();
-        if (op instanceof KeyBasedMapOperation) {
+        if (op instanceof Backup) {
+            BackupAwareOperation parentOp = ((Backup) op).getParentOp();
+            name = "Backup(" + getNameOfOperation((Operation) parentOp) + "/sync=" + parentOp.getSyncBackupCount() +
+                        "/async=" + parentOp.getAsyncBackupCount() + ")";
+        } else if (op instanceof KeyBasedMapOperation) {
             name += "(" + ((KeyBasedMapOperation) op).getName() + ")";
         } else if (op instanceof InvalidateNearCacheOperation) {
             name += "(" + ((InvalidateNearCacheOperation) op).getMapName() + ")";
         } else if (op instanceof AbstractNamedOperation) {
             name += "(" + ((AbstractNamedOperation) op).getName() + ")";
         }
+        return name;
+    }
+
+    // Record various statistics for a processed Operation.
+    private void countProcessedOperation(Operation op) {
+        if (!doCountRemoteOperations) {
+            return;
+        }
+        long invocationTime = op.getInvocationTime();
+        if (invocationTime < 0) {
+            // We are only interested in Operations with valid invocationTimes
+            return;
+        }
+        Address callerAddress = op.getCallerAddress();
+        if (callerAddress == null || callerAddress.equals(nodeEngine.getThisAddress())) {
+            // We are only interested in Operations from remote nodes.
+            return;
+        }
+        long latency = invocationTime - nodeEngine.getClusterTime();
+        processedOperationsCount.incrementAndGet();
+        processedOperationsLatency.addAndGet(latency);
+        long worstProcessedOperationLatencyValue;
+        for (int i = 0; (worstProcessedOperationLatencyValue = worstProcessedOperationLatency.longValue()) < latency &&
+                i < STATISTICS_SPIN_MAX; i++) {
+            if (worstProcessedOperationLatency.compareAndSet(worstProcessedOperationLatencyValue, latency)) {
+                break;
+            }
+        }
+    }
+
+    // Record various statistics for an Operation sent to a remote node.
+    private void countRemoteOperation(Operation op, long time, int bufferSize) {
+        if (!doCountRemoteOperations) {
+            return;
+        }
+        executedRemoteOperationsCount.incrementAndGet();
+
+        String name = getNameOfOperation(op);
         incrementRemoteOperationByName(name);
 
         remoteOperationSerializationTime.addAndGet(time);
@@ -569,6 +632,7 @@ final class BasicOperationService implements InternalOperationService {
                 i < STATISTICS_SPIN_MAX; i++) {
             if (worstRemoteOperationSerializationTime.compareAndSet(worstRemoteOperationSerializationTimeValue, time)) {
                 worstOperation = name;
+                break;
             }
         }
 
@@ -913,13 +977,18 @@ final class BasicOperationService implements InternalOperationService {
          * Runs operation in calling thread.
          */
         private void handle(Operation op) {
+            if (op.getInterrupted()) {
+                return;
+            }
+
             executedOperationsCount.incrementAndGet();
 
             RemoteCallKey callKey = null;
             try {
-                if (timeout(op)) {
-                    return;
+                if (isCallTimedOut(op)) {
+                    logger.warning("Processing expired operation: " + op.toString());
                 }
+                countProcessedOperation(op);
 
                 callKey = beforeCallExecution(op);
 
@@ -953,16 +1022,6 @@ final class BasicOperationService implements InternalOperationService {
                     nodeEngine.waitNotifyService.await(waitSupport);
                     return true;
                 }
-            }
-            return false;
-        }
-
-        private boolean timeout(Operation op) {
-            if (isCallTimedOut(op)) {
-                Object response = new CallTimeoutException(
-                        op.getClass().getName(), op.getInvocationTime(), op.getCallTimeout());
-                op.getResponseHandler().sendResponse(response);
-                return true;
             }
             return false;
         }
@@ -1154,7 +1213,7 @@ final class BasicOperationService implements InternalOperationService {
             Operation op = (Operation) backupAwareOp;
             Operation backupOp = initBackupOperation(backupAwareOp, replicaIndex);
             Data backupOpData = nodeEngine.getSerializationService().toData(backupOp);
-            Backup backup = new Backup(backupOpData, op.getCallerAddress(), replicaVersions, isSyncBackup);
+            Backup backup = new Backup(backupOpData, op.getCallerAddress(), replicaVersions, isSyncBackup, backupAwareOp);
             backup.setPartitionId(op.getPartitionId())
                     .setReplicaIndex(replicaIndex)
                     .setServiceName(op.getServiceName())
