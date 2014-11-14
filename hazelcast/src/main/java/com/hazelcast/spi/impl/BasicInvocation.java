@@ -28,7 +28,6 @@ import com.hazelcast.spi.ExecutionService;
 import com.hazelcast.spi.Operation;
 import com.hazelcast.spi.ResponseHandler;
 import com.hazelcast.spi.WaitSupport;
-import com.hazelcast.spi.exception.CallTimeoutException;
 import com.hazelcast.spi.exception.ResponseAlreadySentException;
 import com.hazelcast.spi.exception.RetryableException;
 import com.hazelcast.spi.exception.RetryableIOException;
@@ -394,7 +393,6 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
 
     //this method is called by the operation service to signal the invocation that something has happened, e.g.
     //a response is returned.
-    //@Override
     public void notify(Object obj) {
         Object response = resolveResponse(obj);
 
@@ -408,6 +406,21 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
             return;
         }
 
+        if (response instanceof CallTimeoutResponse) {
+            handleTimeoutResponse();
+            return;
+        }
+
+        if (response instanceof NormalResponse) {
+            handleNormalResponse((NormalResponse) response);
+            return;
+        }
+
+        // there are no backups or the number of expected backups has returned; so signal the future that the result is ready.
+        invocationFuture.set(response);
+    }
+
+    private void handleNormalResponse(NormalResponse response) {
         //if a regular response came and there are backups, we need to wait for the backs.
         //when the backups complete, the response will be send by the last backup.
         if (response instanceof NormalResponse && op instanceof BackupAwareOperation) {
@@ -451,10 +464,6 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
             return obj;
         }
 
-        if (error instanceof CallTimeoutException) {
-            return resolveCallTimeout();
-        }
-
         ExceptionAction action = onException(error);
         int localInvokeCount = invokeCount;
         if (action == ExceptionAction.RETRY_INVOCATION && localInvokeCount < tryCount) {
@@ -473,7 +482,7 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
 
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "VO_VOLATILE_INCREMENT",
             justification = "We have the guarantee that only a single thread at any given time can change the volatile field")
-    private Object resolveCallTimeout() {
+    private void handleTimeoutResponse() {
         if (logger.isFinestEnabled()) {
             logger.finest("Call timed-out during wait-notify phase, retrying call: " + toString());
         }
@@ -483,7 +492,7 @@ abstract class BasicInvocation implements ResponseHandler, Runnable {
             waitTimeout -= callTimeout;
             op.setWaitTimeout(waitTimeout);
         }
-        return RETRY_RESPONSE;
+        handleRetryResponse();
     }
 
     protected abstract Address getTarget();

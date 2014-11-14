@@ -227,7 +227,7 @@ class WaitNotifyServiceImpl implements WaitNotifyService {
         final WaitSupport waitSupport;
         final long expirationTime;
         volatile boolean valid = true;
-        volatile Throwable error;
+        volatile Object cancelResponse;
 
         WaitingOp(Queue<WaitingOp> queue, WaitSupport waitSupport) {
             this.op = (Operation) waitSupport;
@@ -270,7 +270,7 @@ class WaitNotifyServiceImpl implements WaitNotifyService {
         }
 
         public boolean isCancelled() {
-            return error != null;
+            return cancelResponse != null;
         }
 
         public boolean shouldWait() {
@@ -313,7 +313,7 @@ class WaitNotifyServiceImpl implements WaitNotifyService {
             if (expired) {
                 waitSupport.onWaitExpire();
             } else {
-                op.getResponseHandler().sendResponse(error);
+                op.getResponseHandler().sendResponse(cancelResponse);
             }
         }
 
@@ -362,8 +362,8 @@ class WaitNotifyServiceImpl implements WaitNotifyService {
             waitSupport.onWaitExpire();
         }
 
-        public void cancel(Throwable t) {
-            error = t;
+        public void cancel(Object error) {
+            this.cancelResponse = error;
         }
 
         @Override
