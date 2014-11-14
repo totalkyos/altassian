@@ -801,8 +801,8 @@ final class BasicOperationService implements InternalOperationService {
                 }
                 // End temporary code
 
-                if (response instanceof NormalResponse) {
-                    notifyRemoteCall((NormalResponse) response);
+                if (response instanceof NormalResponse || response instanceof CallTimeoutResponse) {
+                    notifyRemoteCall(response);
                 } else if (response instanceof BackupResponse) {
                     notifyBackupCall(response.getCallId());
                 } else {
@@ -814,7 +814,7 @@ final class BasicOperationService implements InternalOperationService {
         }
 
         // TODO: @mm - operations those do not return response can cause memory leaks! Call->Invocation->Operation->Data
-        private void notifyRemoteCall(NormalResponse response) {
+        private void notifyRemoteCall(Response response) {
             BasicInvocation invocation = invocations.get(response.getCallId());
             if (invocation == null) {
                 if (nodeEngine.isActive()) {
