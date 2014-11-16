@@ -134,8 +134,6 @@ final class BasicOperationService implements InternalOperationService {
     private final ILogger logger;
     private final AtomicLong callIdGen = new AtomicLong(1);
 
-    private final Map<RemoteCallKey, RemoteCallKey> executingCalls;
-
     private final long defaultCallTimeout;
     private final ExecutionService executionService;
     private final OperationHandler operationHandler;
@@ -153,8 +151,6 @@ final class BasicOperationService implements InternalOperationService {
         int coreSize = Runtime.getRuntime().availableProcessors();
         boolean reallyMultiCore = coreSize >= CORE_SIZE_CHECK;
         int concurrencyLevel = reallyMultiCore ? coreSize * CORE_SIZE_FACTOR : CONCURRENCY_LEVEL;
-        this.executingCalls =
-                new ConcurrentHashMap<RemoteCallKey, RemoteCallKey>(INITIAL_CAPACITY, LOAD_FACTOR, concurrencyLevel);
         this.invocations = new ConcurrentHashMap<Long, BasicInvocation>(INITIAL_CAPACITY, LOAD_FACTOR, concurrencyLevel);
         this.executedRemoteOperationsByName = new ConcurrentHashMap<String, Long>();
         this.scheduler = new BasicOperationScheduler(node, executionService, new BasicDispatcherImpl());
@@ -181,7 +177,7 @@ final class BasicOperationService implements InternalOperationService {
 
     @Override
     public int getRunningOperationsCount() {
-        return executingCalls.size();
+        return scheduler.getRunningOperationsCount();
     }
 
     @Override
@@ -441,7 +437,7 @@ final class BasicOperationService implements InternalOperationService {
 
     @PrivateApi
     boolean isOperationExecuting(Address callerAddress, String callerUuid, long operationCallId) {
-        return executingCalls.containsKey(new RemoteCallKey(callerAddress, callerUuid, operationCallId));
+        return scheduler.isOperationExecuting(callerAddress, callerUuid, operationCallId);
     }
 
     @PrivateApi
@@ -567,7 +563,7 @@ final class BasicOperationService implements InternalOperationService {
             // We are only interested in Operations from remote nodes.
             return;
         }
-        long latency = invocationTime - nodeEngine.getClusterTime();
+        long latency = nodeEngine.getClusterTime() - invocationTime;
         processedOperationsCount.incrementAndGet();
         processedOperationsLatency.addAndGet(latency);
         long worstProcessedOperationLatencyValue;
@@ -937,8 +933,6 @@ final class BasicOperationService implements InternalOperationService {
                 }
                 countProcessedOperation(op);
 
-                callKey = beforeCallExecution(op);
-
                 ensureNoPartitionProblems(op);
 
                 beforeRun(op);
@@ -953,7 +947,7 @@ final class BasicOperationService implements InternalOperationService {
             } catch (Throwable e) {
                 handleOperationError(op, e);
             } finally {
-                afterCallExecution(op, callKey);
+                scheduler.afterCallExecution(op);
             }
         }
 
@@ -1041,26 +1035,6 @@ final class BasicOperationService implements InternalOperationService {
 
         private boolean retryDuringMigration(Operation op) {
             return !(op instanceof ReadonlyOperation || OperationAccessor.isMigrationOperation(op));
-        }
-
-        private RemoteCallKey beforeCallExecution(Operation op) {
-            RemoteCallKey callKey = null;
-            if (op.getCallId() != 0 && op.returnsResponse()) {
-                callKey = new RemoteCallKey(op);
-                RemoteCallKey current = executingCalls.put(callKey, callKey);
-                if (current != null) {
-                    logger.warning("Duplicate Call record! -> " + callKey + " / " + current + " == " + op.getClass().getName());
-                }
-            }
-            return callKey;
-        }
-
-        private void afterCallExecution(Operation op, RemoteCallKey callKey) {
-            if (callKey != null && op.getCallId() != 0 && op.returnsResponse()) {
-                if (executingCalls.remove(callKey) == null) {
-                    logger.severe("No Call record has been found: -> " + callKey + " == " + op.getClass().getName());
-                }
-            }
         }
 
         private void handleOperationError(RemotePropagatable remotePropagatable, Throwable e) {
@@ -1190,75 +1164,6 @@ final class BasicOperationService implements InternalOperationService {
                 throw new IllegalStateException("Normally shouldn't happen! Owner node and backup node "
                         + "are the same! " + partition);
             }
-        }
-    }
-
-    private static final class RemoteCallKey {
-        private final long time = Clock.currentTimeMillis();
-        // human readable caller
-        private final Address callerAddress;
-        private final String callerUuid;
-        private final long callId;
-
-        private RemoteCallKey(Address callerAddress, String callerUuid, long callId) {
-            if (callerUuid == null) {
-                throw new IllegalArgumentException("Caller UUID is required!");
-            }
-            this.callerAddress = callerAddress;
-            if (callerAddress == null) {
-                throw new IllegalArgumentException("Caller address is required!");
-            }
-            this.callerUuid = callerUuid;
-            this.callId = callId;
-        }
-
-        private RemoteCallKey(final Operation op) {
-            callerUuid = op.getCallerUuid();
-            if (callerUuid == null) {
-                throw new IllegalArgumentException("Caller UUID is required! -> " + op);
-            }
-            callerAddress = op.getCallerAddress();
-            if (callerAddress == null) {
-                throw new IllegalArgumentException("Caller address is required! -> " + op);
-            }
-            callId = op.getCallId();
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            RemoteCallKey callKey = (RemoteCallKey) o;
-            if (callId != callKey.callId) {
-                return false;
-            }
-            if (!callerUuid.equals(callKey.callerUuid)) {
-                return false;
-            }
-            return true;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = callerUuid.hashCode();
-            result = 31 * result + (int) (callId ^ (callId >>> 32));
-            return result;
-        }
-
-        @Override
-        public String toString() {
-            final StringBuilder sb = new StringBuilder();
-            sb.append("RemoteCallKey");
-            sb.append("{callerAddress=").append(callerAddress);
-            sb.append(", callerUuid=").append(callerUuid);
-            sb.append(", callId=").append(callId);
-            sb.append(", time=").append(time);
-            sb.append('}');
-            return sb.toString();
         }
     }
 }
