@@ -10,7 +10,7 @@ import java.util.Set;
 /**
  * Defines the different capabilities a member can have in the cluster
  * A member with no capabilities has read and write access to the data in the cluster
- * @since 3.3-atlassian-1
+ * @since 3.4
  */
 public enum Capability {
     /**

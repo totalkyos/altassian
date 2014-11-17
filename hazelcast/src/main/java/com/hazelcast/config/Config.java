@@ -185,7 +185,7 @@ public class Config {
      * updated using {@link com.hazelcast.core.Member#updateCapabilities(java.util.Set)}
      * @param capabilities The capabilities to set in the instance.
      * @return This config instance.
-     * @since 3.3-atlassian-1
+     * @since 3.4
      */
     public Config setCapabilities(Set<Capability> capabilities) {
         this.capabilities = capabilities;
