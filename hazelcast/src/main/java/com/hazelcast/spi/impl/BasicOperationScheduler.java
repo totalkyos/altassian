@@ -152,9 +152,7 @@ public final class BasicOperationScheduler {
         if (op.getCallId() != 0 && op.returnsResponse()) {
             RemoteCallKey callKey = new RemoteCallKey(op);
             if (callKey != null) {
-                if (executingCalls.remove(callKey) == null) {
-                    logger.severe("No Call record has been found: -> " + callKey + " == " + op.getClass().getName());
-                }
+                executingCalls.remove(callKey);
             }
         }
     }
