@@ -220,8 +220,8 @@ final class BasicInvocationFuture<E> implements InternalCompletableFuture<E> {
 
             if (!interrupted && longPolling) {
                 // no response!
-                Address target = basicInvocation.getTarget();
-                if (basicInvocation.nodeEngine.getThisAddress().equals(target)) {
+                Address target = invocation.getTarget();
+                if (invocation.remote && invocation.nodeEngine.getThisAddress().equals(target)) {
                     // target may change during invocation because of migration!
                     continue;
                 }
@@ -266,7 +266,7 @@ final class BasicInvocationFuture<E> implements InternalCompletableFuture<E> {
     }
 
     private Object newOperationTimeoutException(int pollCount, long pollTimeoutMs) {
-        boolean hasResponse = basicInvocation.potentialResponse == null;
+        boolean hasResponse = basicInvocation.potentialResponse != null;
         int backupsExpected = basicInvocation.backupsExpected;
         int backupsCompleted = basicInvocation.backupsCompleted;
 
