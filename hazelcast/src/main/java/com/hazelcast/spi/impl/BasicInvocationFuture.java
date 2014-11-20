@@ -220,8 +220,8 @@ final class BasicInvocationFuture<E> implements InternalCompletableFuture<E> {
 
             if (!interrupted && longPolling) {
                 // no response!
-                Address target = invocation.getTarget();
-                if (invocation.remote && invocation.nodeEngine.getThisAddress().equals(target)) {
+                Address target = basicInvocation.getTarget();
+                if (basicInvocation.remote && basicInvocation.nodeEngine.getThisAddress().equals(target)) {
                     // target may change during invocation because of migration!
                     continue;
                 }

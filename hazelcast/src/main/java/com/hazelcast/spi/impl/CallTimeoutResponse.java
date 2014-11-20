@@ -39,12 +39,5 @@ public class CallTimeoutResponse extends Response implements IdentifiedDataSeria
     public int getId() {
         return SpiDataSerializerHook.CALL_TIMEOUT_RESPONSE;
     }
-
-    @Override
-    public Throwable fillInStackTrace() {
-        // CallTimeoutExceptions are used as flags over the wire and never have useful stack traces so we avoid the
-        // serialization cost
-        return this;
-    }
 }
 
