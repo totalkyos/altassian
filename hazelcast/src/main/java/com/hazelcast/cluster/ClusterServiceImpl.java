@@ -282,7 +282,7 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
          */
         long clockJump = 0L;
         if (lastHeartBeat != 0L) {
-            clockJump = now - lastHeartBeat - heartbeatInterval;
+            clockJump = now - lastHeartBeat - TimeUnit.SECONDS.toMillis(heartbeatInterval);
             if (Math.abs(clockJump) > 5000L) {
                 SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
                 logger.warning("System clock jumped from " + sdf.format(new Date(lastHeartBeat)) + " to " +
