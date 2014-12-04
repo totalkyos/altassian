@@ -122,6 +122,7 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
 
     private static final String EXECUTOR_NAME = "hz:cluster";
     private static final int HEARTBEAT_INTERVAL = 500;
+    private static final long HEARTBEAT_LOG_THRESHOLD = 10000L;
     private static final int PING_INTERVAL = 5000;
 
     private final Node node;
@@ -307,9 +308,9 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
         long clockJump = 0L;
         if (lastHeartBeat != 0L) {
             clockJump = now - lastHeartBeat - TimeUnit.SECONDS.toMillis(heartbeatInterval);
-            if (Math.abs(clockJump) > 5000L) {
+            if (Math.abs(clockJump) > HEARTBEAT_LOG_THRESHOLD) {
                 SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
-                logger.warning("System clock jumped from " + sdf.format(new Date(lastHeartBeat)) + " to " +
+                logger.info("System clock apparently jumped from " + sdf.format(new Date(lastHeartBeat)) + " to " +
                         sdf.format(new Date(now)) + " since last heartbeat (" + String.format("%+d", clockJump) + "ms).");
             }
             clockJump = Math.max(0L, clockJump);
@@ -1361,12 +1362,8 @@ public final class ClusterServiceImpl implements ClusterService, ConnectionListe
 
     public void setMasterTime(long masterTime) {
         long diff = masterTime - Clock.currentTimeMillis();
-        if (Math.abs(diff) < Math.abs(clusterTimeDiff)) {
-            logger.finest("Setting cluster time diff to " + diff + "ms, previous value " + clusterTimeDiff + "ms.");
-            this.clusterTimeDiff = diff;
-        } else {
-            logger.finest("Not setting cluster time diff to " + diff + "ms as current value " + clusterTimeDiff + "ms seems better.");
-        }
+        logger.finest("Setting cluster time diff to " + diff + "ms.");
+        this.clusterTimeDiff = diff;
     }
 
     public long getClusterTimeDiff() {

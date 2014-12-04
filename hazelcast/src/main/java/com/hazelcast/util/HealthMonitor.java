@@ -17,7 +17,7 @@
 package com.hazelcast.util;
 
 import com.hazelcast.client.impl.ClientEngineImpl;
-import com.hazelcast.cluster.ClusterServiceImpl;
+import com.hazelcast.cluster.impl.ClusterServiceImpl;
 import com.hazelcast.concurrent.lock.LockService;
 import com.hazelcast.instance.HazelcastInstanceImpl;
 import com.hazelcast.instance.Node;
