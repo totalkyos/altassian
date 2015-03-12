@@ -1368,7 +1368,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         if (isEmpty) {
             logger.finest("Successfully drained all partitions");
         } else {
-            logger.finest("Timed out waiting for partitions to be drained");
+            logger.warning("Timed out waiting for partitions to be drained");
         }
 
         return isEmpty;
