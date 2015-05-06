@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014, Hazelcast, Inc. All Rights Reserved.
+ * Copyright (c) 2008-2015, Hazelcast, Inc. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ public final class ValueCollectionFactory {
      * Picks right collection type, like {@link java.util.Set} or {@link java.util.List}
      * depending on the {@link com.hazelcast.config.MultiMapConfig#valueCollectionType} and creates it.
      *
-     * @param collectionType  one of {@link MultiMapConfig.ValueCollectionType#SET}
+     * @param collectionType  one of {@link com.hazelcast.config.MultiMapConfig.ValueCollectionType#SET}
      *                        or {@link MultiMapConfig.ValueCollectionType#LIST}
      * @param initialCapacity if smaller than or equals to 0 falls back to default initial capacity of corresponding collection.
      * @return {@link java.util.Set} or {@link java.util.List} depending on the collectionType argument

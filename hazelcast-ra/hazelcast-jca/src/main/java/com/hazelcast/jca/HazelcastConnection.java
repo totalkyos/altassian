@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2013, Hazelcast, Inc. All Rights Reserved.
+ * Copyright (c) 2008-2015, Hazelcast, Inc. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,27 +35,27 @@ public interface HazelcastConnection extends Connection, HazelcastInstance {
     //Transactionals
 
     /**
-     * @see TransactionalTaskContext#getMap(String)
+     * @see com.hazelcast.transaction.TransactionalTaskContext#getMap(String)
      */
     <K, V> TransactionalMap<K, V> getTransactionalMap(String name);
 
     /**
-     * @see TransactionalTaskContext#getQueue(String)
+     * @see com.hazelcast.transaction.TransactionalTaskContext#getQueue(String)
      */
     <E> TransactionalQueue<E> getTransactionalQueue(String name);
 
     /**
-     * @see TransactionalTaskContext#getMultiMap(String)
+     * @see com.hazelcast.transaction.TransactionalTaskContext#getMultiMap(String)
      */
     <K, V> TransactionalMultiMap<K, V> getTransactionalMultiMap(String name);
 
     /**
-     * @see TransactionalTaskContext#getList(String)
+     * @see com.hazelcast.transaction.TransactionalTaskContext#getList(String)
      */
     <E> TransactionalList<E> getTransactionalList(String name);
 
     /**
-     * @see TransactionalTaskContext#getSet(String)
+     * @see com.hazelcast.transaction.TransactionalTaskContext#getSet(String)
      */
     <E> TransactionalSet<E> getTransactionalSet(String name);
 

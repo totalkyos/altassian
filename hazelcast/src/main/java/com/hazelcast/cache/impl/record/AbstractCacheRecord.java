@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2013, Hazelcast, Inc. All Rights Reserved.
+ * Copyright (c) 2008-2015, Hazelcast, Inc. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,6 +84,8 @@ public abstract class AbstractCacheRecord<V> implements CacheRecord<V>, DataSeri
     }
 
     @Override
+    @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "VO_VOLATILE_INCREMENT",
+            justification = "CacheRecord can be accessed by only its own partition thread.")
     public void incrementAccessHit() {
         accessHit++;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2013, Hazelcast, Inc. All Rights Reserved.
+ * Copyright (c) 2008-2015, Hazelcast, Inc. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EventObject;
 import java.util.HashSet;
@@ -169,9 +170,9 @@ public class ClusterMembershipTest extends HazelcastTestSupport {
     }
 
     @Test
-    public void testNodesAbleToJoinFromMultipleThreads() throws InterruptedException {
+    public void testNodesAbleToJoinFromMultipleThreads_whenPostJoinOperationPresent() throws InterruptedException {
         final int instanceCount = 6;
-        final TestHazelcastInstanceFactory nodeFactory = createHazelcastInstanceFactory(instanceCount);
+        final TestHazelcastInstanceFactory factory = createHazelcastInstanceFactory(instanceCount);
         final Config config = new Config();
         config.setProperty(GroupProperties.PROP_WAIT_SECONDS_BEFORE_JOIN, "0");
         final String mapName = randomMapName();
@@ -182,14 +183,18 @@ public class ClusterMembershipTest extends HazelcastTestSupport {
         for (int i = 0; i < instanceCount; i++) {
             executorService.execute(new Runnable() {
                 public void run() {
-                    final HazelcastInstance hz = nodeFactory.newHazelcastInstance(config);
+                    HazelcastInstance hz = factory.newHazelcastInstance(config);
                     hz.getMap(mapName);
-                    assertClusterSizeEventually(instanceCount, hz, 20);
                     latch.countDown();
                 }
             });
         }
         assertOpenEventually(latch);
+
+        Collection<HazelcastInstance> instances = factory.getAllHazelcastInstances();
+        for (HazelcastInstance instance : instances) {
+            assertClusterSize(instanceCount, instance);
+        }
     }
 
     @Test
@@ -271,7 +276,8 @@ public class ClusterMembershipTest extends HazelcastTestSupport {
         hz1.getCluster().addMembershipListener(listener);
 
         assertEventuallySizeAtLeast(listener.events, 1);
-        assertInitialMembershipEvent(listener.events.get(0), hz1.getCluster().getLocalMember(), hz2.getCluster().getLocalMember());
+        assertInitialMembershipEvent(listener.events.get(0), hz1.getCluster().getLocalMember(),
+                hz2.getCluster().getLocalMember());
     }
 
     public void assertInitialMembershipEvent(EventObject e, Member... expectedMembers) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2013, Hazelcast, Inc. All Rights Reserved.
+ * Copyright (c) 2008-2015, Hazelcast, Inc. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package com.hazelcast.cache.impl;
 import javax.cache.Cache;
 
 /**
- * Simple  {@link Cache.Entry} implementation for wrapping a "key,value" pair.
+ * Simple  {@link javax.cache.Cache.Entry} implementation for wrapping a "key,value" pair.
  *
  * <p>This implementation is used by {@link javax.cache.integration.CacheWriter}s and
  * {@link javax.cache.Cache#iterator()}.</p>

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2013, Hazelcast, Inc. All Rights Reserved.
+ * Copyright (c) 2008-2015, Hazelcast, Inc. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,5 +34,17 @@ public class MapEntrySimple<K, V> extends AbstractMap.SimpleEntry<K, V> {
 
     public boolean isModified() {
         return modified;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        // modified field is not part part of equality or hashCode.
+        return super.equals(o);
+    }
+
+    @Override
+    public int hashCode() {
+        // modified field is not part part of equality or hashCode.
+        return super.hashCode();
     }
 }
