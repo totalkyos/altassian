@@ -90,6 +90,8 @@ public final class MemberImpl
         super(member);
         this.localMember = member.localMember;
         this.lastRead = member.lastRead;
+        this.capabilities = member.capabilities == null ? Collections.unmodifiableSet(EnumSet.noneOf(Capability.class)) :
+                Collections.unmodifiableSet(EnumSet.copyOf(member.capabilities));
     }
 
     public Set<Capability> getCapabilities() {
