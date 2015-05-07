@@ -20,6 +20,9 @@ import com.hazelcast.cluster.ClusterService;
 import com.hazelcast.cluster.ClusterState;
 import com.hazelcast.cluster.MemberAttributeOperationType;
 import com.hazelcast.cluster.MemberInfo;
+import com.hazelcast.cluster.impl.operations.JoinRequestOperation;
+import com.hazelcast.cluster.impl.operations.MemberCapabilityChangedOperation;
+import com.hazelcast.cluster.impl.operations.MemberCapabilityUpdateException;
 import com.hazelcast.cluster.impl.operations.MemberInfoUpdateOperation;
 import com.hazelcast.cluster.impl.operations.MemberRemoveOperation;
 import com.hazelcast.cluster.impl.operations.ShutdownNodeOperation;
@@ -31,6 +34,7 @@ import com.hazelcast.core.MemberAttributeEvent;
 import com.hazelcast.core.MemberSelector;
 import com.hazelcast.core.MembershipEvent;
 import com.hazelcast.core.MembershipListener;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.instance.GroupProperty;
 import com.hazelcast.instance.HazelcastInstanceImpl;
 import com.hazelcast.instance.LifecycleServiceImpl;
@@ -61,6 +65,7 @@ import com.hazelcast.transaction.impl.Transaction;
 import com.hazelcast.util.executor.ExecutorType;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -79,6 +84,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.hazelcast.cluster.memberselector.MemberSelectors.NON_LOCAL_MEMBER_SELECTOR;
+import static com.hazelcast.instance.Capability.PARTITION_HOST;
 import static com.hazelcast.util.Preconditions.checkNotNull;
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableMap;
@@ -426,7 +432,6 @@ public class ClusterServiceImpl implements ClusterService, ConnectionListener, M
                 for (MemberImpl newMember : newMembers) {
                     // sync call
                     node.getPartitionService().memberAdded(newMember);
-
                     // async events
                     eventMembers.add(newMember);
                     sendMembershipEventNotifications(newMember, unmodifiableSet(new LinkedHashSet<Member>(eventMembers)), true);
@@ -451,6 +456,64 @@ public class ClusterServiceImpl implements ClusterService, ConnectionListener, M
         } finally {
             lock.unlock();
         }
+    }
+
+    public void updateMemberCapabilities(String uuid, Set<Capability> newCapabilities) {
+        lock.lock();
+        try {
+            MemberImpl member = getMember(uuid);
+            if (member == null) {
+                throw new MemberCapabilityUpdateException(String.format("Could not find member [%s] to update capabilities", uuid));
+                }
+
+            if (node.isMaster()) {
+                doMasterUpdate(member, newCapabilities);
+            } else {
+                member.setCapabilities(newCapabilities);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void doMasterUpdate(MemberImpl member, Set<Capability> newCapabilities) {
+        if (canUpdate(newCapabilities)) {
+            boolean wasPartitionHost = member.hasCapability(PARTITION_HOST);
+
+            if (member.setCapabilities(newCapabilities)) {
+                // If node has been added or removed as a partition host then trigger re-partitioning
+                if (wasPartitionHost != member.hasCapability(PARTITION_HOST)) {
+                    node.getPartitionService().memberCapabilityUpdate(member);
+                }
+
+                logger.info(String.format("Updated member [%s] capabilities to [%s]", member, newCapabilities));
+
+                // Let other members know they should update their members
+                notifyCapabilityUpdate(member.getUuid(), newCapabilities);
+            }
+        } else {
+            logger.info(String.format("Cannot update member [%s] capabilities to [%s]", member, newCapabilities));
+        }
+    }
+
+    private boolean canUpdate(Set<Capability> newCapabilities) {
+        return newCapabilities.contains(PARTITION_HOST) || getMemberList(PARTITION_HOST).size() > 1;
+    }
+
+    private void notifyCapabilityUpdate(String uuid, Set<Capability> capabilities) {
+        for (MemberImpl member : getMemberImpls()) {
+            if (!member.localMember()) {
+                nodeEngine.getOperationService().send(new MemberCapabilityChangedOperation(uuid, capabilities), member.getAddress());
+            }
+        }
+    }
+
+    public boolean sendJoinRequest(Address toAddress, boolean withCredentials) {
+        if (toAddress == null) {
+            toAddress = node.getMasterAddress();
+        }
+        JoinRequestOperation joinRequest = new JoinRequestOperation(node.createJoinRequest(withCredentials));
+        return nodeEngine.getOperationService().send(joinRequest, toAddress);
     }
 
     @Override
@@ -637,7 +700,7 @@ public class ClusterServiceImpl implements ClusterService, ConnectionListener, M
         Address address = memberInfo.getAddress();
         address.setScopeId(ipV6ScopeId);
         return new MemberImpl(address, thisAddress.equals(address), memberInfo.getUuid(),
-                (HazelcastInstanceImpl) nodeEngine.getHazelcastInstance(), memberInfo.getAttributes(), memberInfo.isLiteMember());
+                (HazelcastInstanceImpl) nodeEngine.getHazelcastInstance(), memberInfo.getCapabilities(), memberInfo.getAttributes(), memberInfo.isLiteMember());
     }
 
     @Override
@@ -685,6 +748,18 @@ public class ClusterServiceImpl implements ClusterService, ConnectionListener, M
     }
 
     @SuppressWarnings("unchecked")
+    public Collection<MemberImpl> getMemberList(Capability filter) {
+        Collection<MemberImpl> memberList = getMemberImpls();
+        Collection<MemberImpl> filtered = new ArrayList<MemberImpl>(memberList.size());
+        for (MemberImpl member : memberList) {
+            if (member.hasCapability(filter)) {
+                filtered.add(member);
+            }
+        }
+
+        return filtered;
+    }
+
     @Override
     public Set<Member> getMembers() {
         return (Set) membersRef.get();

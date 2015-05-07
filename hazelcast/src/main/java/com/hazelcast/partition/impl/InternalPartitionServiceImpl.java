@@ -26,6 +26,7 @@ import com.hazelcast.core.Member;
 import com.hazelcast.core.MigrationEvent;
 import com.hazelcast.core.MigrationEvent.MigrationStatus;
 import com.hazelcast.core.MigrationListener;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.instance.GroupProperty;
 import com.hazelcast.instance.MemberImpl;
 import com.hazelcast.instance.Node;
@@ -79,6 +80,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -105,6 +107,7 @@ import static com.hazelcast.partition.impl.InternalPartitionServiceState.MIGRATI
 import static com.hazelcast.partition.impl.InternalPartitionServiceState.MIGRATION_ON_MASTER;
 import static com.hazelcast.partition.impl.InternalPartitionServiceState.REPLICA_NOT_SYNC;
 import static com.hazelcast.partition.impl.InternalPartitionServiceState.SAFE;
+import static com.hazelcast.instance.Capability.PARTITION_HOST;
 import static com.hazelcast.spi.impl.OperationResponseHandlerFactory.createErrorLoggingResponseHandler;
 import static com.hazelcast.util.FutureUtil.logAllExceptions;
 import static com.hazelcast.util.FutureUtil.waitWithDeadline;
@@ -380,9 +383,46 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
     }
 
+    @Override
+    public void memberCapabilityUpdate(MemberImpl updatedMember) {
+        updateMemberGroupsSize();
+
+        lock.lock();
+        if (node.isMaster() && (NodeState.ACTIVE.equals(node.getState()))) {
+            try {
+                migrationQueue.clear();
+                if (!updatedMember.hasCapability(PARTITION_HOST) && !activeMigrations.isEmpty()) {
+                    for (MigrationInfo migrationInfo : activeMigrations.values()) {
+                        if (updatedMember.getAddress().equals(migrationInfo.getDestination())) {
+                            migrationInfo.invalidate();
+                        }
+                    }
+                }
+
+                if (initialized) {
+                    migrationQueue.add(new RepartitioningTask());
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
     private Collection<MemberGroup> createMemberGroups() {
-        final Collection<Member> members = node.getClusterService().getMembers(DATA_MEMBER_SELECTOR);
-        return memberGroupFactory.createMemberGroups(members);
+//        final Collection<Member> members = node.getClusterService().getMembers(DATA_MEMBER_SELECTOR);
+        return memberGroupFactory.createMemberGroups(getPartitionHosts());
+    }
+
+    private Collection<MemberImpl> getPartitionHosts() {
+        // Even though the Master's ClusterServiceImpl prevents a node from dropping the PARTITION_HOST Capability if
+        // there is no other node which can host partitions, at any point in time a node can simply close
+        // the connection and no longer be available. If that's the case the Master will have no choice but to
+        // host the partitions.
+        Collection<MemberImpl> members = node.getClusterService().getMemberList(PARTITION_HOST);
+        if (members.isEmpty()) {
+            members.add(nodeEngine.getClusterService().getMember(node.getMasterAddress()));
+        }
+        return members;
     }
 
     private boolean initializePartitionAssignments() {
@@ -631,7 +671,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         try {
             List<MemberInfo> memberInfos = new ArrayList<MemberInfo>(members.size());
             for (MemberImpl member : members) {
-                MemberInfo memberInfo = new MemberInfo(member.getAddress(), member.getUuid(), member.getAttributes());
+                MemberInfo memberInfo = new MemberInfo(member);
                 memberInfos.add(memberInfo);
             }
             ArrayList<MigrationInfo> migrationInfos = new ArrayList<MigrationInfo>(completedMigrations);
@@ -1621,6 +1661,44 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         } finally {
             lock.unlock();
         }
+    }
+
+    @Override
+    public boolean drain(long timeout, TimeUnit timeunit) {
+        MemberImpl localMember = node.localMember;
+        if (localMember.hasCapability(PARTITION_HOST)) {
+            Set<Capability> capabilities = EnumSet.copyOf(localMember.getCapabilities());
+            capabilities.remove(PARTITION_HOST);
+
+            localMember.updateCapabilities(capabilities);
+        }
+
+        return awaitEmpty(timeout, timeunit);
+    }
+
+    private boolean awaitEmpty(long timeout, TimeUnit timeunit) {
+        Collection<MemberImpl> partitionHosts = getPartitionHosts();
+        if (partitionHosts.contains(node.getLocalMember()) && partitionHosts.size() == 1) {
+            // If local node is the only partition host then there's no node we can drain the partitions to.
+            return false;
+        }
+
+        boolean isEmpty = checkIsEmpty();
+        for (long timeoutInMillis = timeunit.toMillis(timeout); timeoutInMillis > 0 && !isEmpty; isEmpty = checkIsEmpty()) {
+            timeoutInMillis = sleepWithBusyWait(timeoutInMillis, DEFAULT_PAUSE_MILLIS);
+        }
+
+        return isEmpty;
+    }
+
+    private boolean checkIsEmpty() {
+        Address localAddress = node.localMember.getAddress();
+        for (int i = 0; i < partitionCount; i++) {
+            if (localAddress.equals(partitions[i].getOwnerOrNull())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

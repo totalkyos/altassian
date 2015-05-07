@@ -285,9 +285,9 @@ public class MemberListTest {
             }
         }
         throw
-            new IllegalStateException("Unable to create " + instanceCount
-                    + " instances from base port " + basePort
-                    + " at " + INSTANCE_CREATE_ATTEMPT_COUNT);
+                new IllegalStateException("Unable to create " + instanceCount
+                        + " instances from base port " + basePort
+                        + " at " + INSTANCE_CREATE_ATTEMPT_COUNT);
     }
 
     private static List<Config> buildConfigurations(int configCount, int basePort) {

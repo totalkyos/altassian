@@ -53,6 +53,7 @@ import com.hazelcast.transaction.TransactionOptions;
 import com.hazelcast.transaction.TransactionalTask;
 
 import java.util.Collection;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
 public final class HazelcastInstanceProxy implements HazelcastInstance, SerializationServiceSupport {
