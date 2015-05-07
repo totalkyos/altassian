@@ -90,4 +90,10 @@ public final class PartitionServiceProxy implements PartitionService {
     public boolean forceLocalMemberToBeSafe(long timeout, TimeUnit unit) {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public boolean drain(long timeout, TimeUnit timeunit) {
+        // Clients  cannot own partitions so there's nothing to drain.
+        return true;
+    }
 }
