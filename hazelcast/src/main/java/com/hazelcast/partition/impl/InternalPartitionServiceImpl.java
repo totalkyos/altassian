@@ -18,10 +18,10 @@ package com.hazelcast.partition.impl;
 
 import com.hazelcast.cluster.MemberInfo;
 import com.hazelcast.core.HazelcastException;
-import com.hazelcast.core.Member;
 import com.hazelcast.core.MigrationEvent;
 import com.hazelcast.core.MigrationEvent.MigrationStatus;
 import com.hazelcast.core.MigrationListener;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.instance.MemberImpl;
 import com.hazelcast.instance.Node;
 import com.hazelcast.instance.OutOfMemoryErrorDispatcher;
@@ -29,64 +29,20 @@ import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.serialization.Data;
-import com.hazelcast.partition.InternalPartition;
-import com.hazelcast.partition.InternalPartitionLostEvent;
-import com.hazelcast.partition.InternalPartitionService;
-import com.hazelcast.partition.MigrationEndpoint;
-import com.hazelcast.partition.MigrationInfo;
-import com.hazelcast.partition.PartitionEvent;
-import com.hazelcast.partition.PartitionEventListener;
-import com.hazelcast.partition.PartitionInfo;
-import com.hazelcast.partition.PartitionLostEvent;
-import com.hazelcast.partition.PartitionLostListener;
-import com.hazelcast.partition.PartitionRuntimeState;
-import com.hazelcast.partition.PartitionServiceProxy;
+import com.hazelcast.partition.*;
 import com.hazelcast.partition.membergroup.MemberGroup;
 import com.hazelcast.partition.membergroup.MemberGroupFactory;
 import com.hazelcast.partition.membergroup.MemberGroupFactoryFactory;
-import com.hazelcast.spi.Callback;
-import com.hazelcast.spi.EventPublishingService;
-import com.hazelcast.spi.EventRegistration;
-import com.hazelcast.spi.EventService;
-import com.hazelcast.spi.ExecutionService;
-import com.hazelcast.spi.InvocationBuilder;
-import com.hazelcast.spi.ManagedService;
-import com.hazelcast.spi.NodeEngine;
-import com.hazelcast.spi.Operation;
-import com.hazelcast.spi.OperationService;
-import com.hazelcast.spi.PartitionAwareService;
-import com.hazelcast.spi.ResponseHandler;
+import com.hazelcast.spi.*;
 import com.hazelcast.spi.impl.NodeEngineImpl;
 import com.hazelcast.spi.impl.ResponseHandlerFactory;
 import com.hazelcast.util.Clock;
 import com.hazelcast.util.ExceptionUtil;
 import com.hazelcast.util.FutureUtil.ExceptionHandler;
-import com.hazelcast.util.scheduler.CoalescingDelayedTrigger;
-import com.hazelcast.util.scheduler.EntryTaskScheduler;
-import com.hazelcast.util.scheduler.EntryTaskSchedulerFactory;
-import com.hazelcast.util.scheduler.ScheduleType;
-import com.hazelcast.util.scheduler.ScheduledEntry;
-import com.hazelcast.util.scheduler.ScheduledEntryProcessor;
+import com.hazelcast.util.scheduler.*;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -95,10 +51,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
-import static com.hazelcast.partition.impl.InternalPartitionServiceState.MIGRATION_LOCAL;
-import static com.hazelcast.partition.impl.InternalPartitionServiceState.MIGRATION_ON_MASTER;
-import static com.hazelcast.partition.impl.InternalPartitionServiceState.SAFE;
-import static com.hazelcast.partition.impl.InternalPartitionServiceState.REPLICA_NOT_SYNC;
+import static com.hazelcast.instance.Capability.PARTITION_HOST;
+import static com.hazelcast.partition.impl.InternalPartitionServiceState.*;
 import static com.hazelcast.util.FutureUtil.logAllExceptions;
 import static com.hazelcast.util.FutureUtil.waitWithDeadline;
 
@@ -307,8 +261,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                     return;
                 }
                 PartitionStateGenerator psg = partitionStateGenerator;
-                final Set<Member> members = node.getClusterService().getMembers();
-                Collection<MemberGroup> memberGroups = memberGroupFactory.createMemberGroups(members);
+                Collection<MemberGroup> memberGroups = memberGroupFactory.createMemberGroups(getPartitionHosts());
                 if (memberGroups.isEmpty()) {
                     logger.warning("No member group is available to assign partition ownership...");
                     return;
@@ -335,8 +288,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
     }
 
     private void updateMemberGroupsSize() {
-        Set<Member> members = node.getClusterService().getMembers();
-        final Collection<MemberGroup> groups = memberGroupFactory.createMemberGroups(members);
+        final Collection<MemberGroup> groups = memberGroupFactory.createMemberGroups(getPartitionHosts());
         int size = 0;
         for (MemberGroup group : groups) {
             if (group.size() > 0) {
@@ -374,6 +326,31 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                     Collection<MemberImpl> members = node.clusterService.getMemberList();
                     PartitionStateOperation op = new PartitionStateOperation(createPartitionState(members));
                     nodeEngine.getOperationService().send(op, member.getAddress());
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    @Override
+    public void memberCapabilityUpdate(MemberImpl updatedMember) {
+        updateMemberGroupsSize();
+
+        lock.lock();
+        if (node.isMaster() && node.isActive()) {
+            try {
+                migrationQueue.clear();
+                if (!updatedMember.hasCapability(PARTITION_HOST) && !activeMigrations.isEmpty()) {
+                    for (MigrationInfo migrationInfo : activeMigrations.values()) {
+                        if (updatedMember.getAddress().equals(migrationInfo.getDestination())) {
+                            migrationInfo.invalidate();
+                    }
+                }
+                }
+
+                if (initialized) {
+                    migrationQueue.add(new RepartitioningTask());
                 }
             } finally {
                 lock.unlock();
@@ -478,7 +455,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         try {
             List<MemberInfo> memberInfos = new ArrayList<MemberInfo>(members.size());
             for (MemberImpl member : members) {
-                MemberInfo memberInfo = new MemberInfo(member.getAddress(), member.getUuid(), member.getAttributes());
+                MemberInfo memberInfo = new MemberInfo(member);
                 memberInfos.add(memberInfo);
             }
             ArrayList<MigrationInfo> migrationInfos = new ArrayList<MigrationInfo>(completedMigrations);
@@ -544,16 +521,16 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
             PartitionRuntimeState partitionState = createPartitionState(members);
             OperationService operationService = nodeEngine.getOperationService();
 
-            List<Future> calls = firePartitionStateOperation(members, partitionState, operationService);
+            List<Future> calls = firePartitionStateOperation(partitionState, operationService);
             waitWithDeadline(calls, 3, TimeUnit.SECONDS, partitionStateSyncTimeoutHandler);
         } finally {
             lock.unlock();
         }
     }
 
-    private List<Future> firePartitionStateOperation(Collection<MemberImpl> members,
-                                                     PartitionRuntimeState partitionState,
+    private List<Future> firePartitionStateOperation(PartitionRuntimeState partitionState,
                                                      OperationService operationService) {
+        Collection<MemberImpl> members = node.clusterService.getMemberList();
         List<Future> calls = new ArrayList<Future>(members.size());
         for (MemberImpl member : members) {
             if (!member.localMember()) {
@@ -1430,6 +1407,44 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
     }
 
+    @Override
+    public boolean drain(long timeout, TimeUnit timeunit) {
+        MemberImpl localMember = node.localMember;
+        if (localMember.hasCapability(PARTITION_HOST)) {
+            Set<Capability> capabilities = EnumSet.copyOf(localMember.getCapabilities());
+            capabilities.remove(PARTITION_HOST);
+
+            localMember.updateCapabilities(capabilities);
+        }
+
+        return awaitEmpty(timeout, timeunit);
+    }
+
+    private boolean awaitEmpty(long timeout, TimeUnit timeunit) {
+        Collection<MemberImpl> partitionHosts = getPartitionHosts();
+        if (partitionHosts.contains(node.getLocalMember()) && partitionHosts.size() == 1) {
+            // If local node is the only partition host then there's no node we can drain the partitions to.
+            return false;
+        }
+
+        boolean isEmpty = checkIsEmpty();
+        for (long timeoutInMillis = timeunit.toMillis(timeout); timeoutInMillis > 0 && !isEmpty; isEmpty = checkIsEmpty()) {
+            timeoutInMillis = sleepWithBusyWait(timeoutInMillis, DEFAULT_PAUSE_MILLIS);
+        }
+
+        return isEmpty;
+    }
+
+    private boolean checkIsEmpty() {
+        Address localAddress = node.localMember.getAddress();
+        for (int i = 0; i < partitionCount; i++) {
+            if (localAddress.equals(partitions[i].getOwnerOrNull())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public void pauseMigration() {
         migrationActive.set(false);
     }
@@ -1617,6 +1632,18 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         }
     }
 
+    private Collection<MemberImpl> getPartitionHosts() {
+        // Even though the Master's ClusterServiceImpl prevents a node from dropping the PARTITION_HOST Capability if
+        // there is no other node which can host partitions, at any point in time a node can simply close
+        // the connection and no longer be available. If that's the case the Master will have no choice but to
+        // host the partitions.
+        Collection<MemberImpl> members = node.getClusterService().getMemberList(PARTITION_HOST);
+        if (members.isEmpty()) {
+            members.add(nodeEngine.getClusterService().getMember(node.getMasterAddress()));
+        }
+        return members;
+    }
+
     private class RepartitioningTask implements Runnable {
         @Override
         public void run() {
@@ -1632,7 +1659,8 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
 
                     migrationQueue.clear();
                     PartitionStateGenerator psg = partitionStateGenerator;
-                    Collection<MemberImpl> members = node.getClusterService().getMemberList();
+                    Collection<MemberImpl> members = getPartitionHosts();
+
                     Collection<MemberGroup> memberGroups = memberGroupFactory.createMemberGroups(members);
                     Address[][] newState = psg.reArrange(memberGroups, partitions);
 
@@ -1666,7 +1694,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
                             currentPartition.setReplicaAddresses(replicas);
                         }
                     }
-                    syncPartitionRuntimeState(members);
+                    syncPartitionRuntimeState();
                     logMigrationStatistics(migrationCount, lostCount);
                 } finally {
                     lock.unlock();

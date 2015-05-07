@@ -18,10 +18,12 @@ package com.hazelcast.client.impl;
 
 import com.hazelcast.core.Member;
 import com.hazelcast.instance.AbstractMember;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.nio.Address;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Client side specific Member implementation.
@@ -153,6 +155,11 @@ public final class MemberImpl
     @Override
     public void removeAttribute(String key) {
         notSupportedOnClient();
+    }
+
+    @Override
+    public void updateCapabilities(Set<Capability> capabilities) {
+        throw new UnsupportedOperationException("Capabilities on remote members must not be changed");
     }
 
     private void notSupportedOnClient() {
