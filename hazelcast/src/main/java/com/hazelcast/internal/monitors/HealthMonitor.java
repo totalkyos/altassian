@@ -18,6 +18,7 @@ package com.hazelcast.internal.monitors;
 
 import com.hazelcast.client.impl.ClientEngineImpl;
 import com.hazelcast.cluster.impl.ClusterServiceImpl;
+import com.hazelcast.concurrent.lock.LockService;
 import com.hazelcast.instance.HazelcastInstanceImpl;
 import com.hazelcast.instance.Node;
 import com.hazelcast.instance.OutOfMemoryErrorDispatcher;
@@ -77,6 +78,7 @@ public class HealthMonitor extends Thread {
     private final ExecutionService executionService;
     private final EventService eventService;
     private final InternalOperationService operationService;
+    private final LockService lockService;
     private final ProxyService proxyService;
     private final ConnectionManager connectionManager;
     private final ClientEngineImpl clientEngine;
@@ -96,6 +98,7 @@ public class HealthMonitor extends Thread {
         this.clusterService = node.getClusterService();
         this.executionService = node.nodeEngine.getExecutionService();
         this.eventService = node.nodeEngine.getEventService();
+        this.lockService = node.nodeEngine.getSharedService(LockService.SERVICE_NAME);
         this.operationService = node.nodeEngine.getOperationService();
         this.proxyService = node.nodeEngine.getProxyService();
         this.clientEngine = node.clientEngine;
@@ -162,6 +165,7 @@ public class HealthMonitor extends Thread {
         private final int eventQueueSize;
         private final int pendingInvocationsCount;
         private final double pendingInvocationsPercentage;
+        private final int lockCount;
         private final int operationServiceOperationExecutorQueueSize;
         private final int operationServiceOperationPriorityExecutorQueueSize;
         private final int operationServiceOperationResponseQueueSize;
@@ -195,6 +199,7 @@ public class HealthMonitor extends Thread {
             systemExecutorQueueSize = executionService.getExecutor(ExecutionService.SYSTEM_EXECUTOR).getQueueSize();
             ioExecutorQueueSize = executionService.getExecutor(ExecutionService.IO_EXECUTOR).getQueueSize();
             eventQueueSize = eventService.getEventQueueSize();
+            lockCount = lockService.getAllLocks().size();
             operationServiceOperationExecutorQueueSize = operationService.getOperationExecutorQueueSize();
             operationServiceOperationPriorityExecutorQueueSize = operationService.getPriorityOperationExecutorQueueSize();
             operationServiceOperationResponseQueueSize = operationService.getResponseQueueSize();
@@ -279,6 +284,7 @@ public class HealthMonitor extends Thread {
             sb.append("executor.q.priorityOperation.size=").
                     append(operationServiceOperationPriorityExecutorQueueSize).append(", ");
             sb.append("executor.q.response.size=").append(operationServiceOperationResponseQueueSize).append(", ");
+            sb.append("lock.count=").append(lockCount).append(", ");
             sb.append("operations.remote.size=").append(remoteOperationsCount).append(", ");
             sb.append("operations.running.size=").append(runningOperationsCount).append(", ");
             sb.append("operations.pending.invocations.count=")
