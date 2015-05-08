@@ -17,6 +17,8 @@
 package com.hazelcast.util;
 
 import com.hazelcast.client.impl.ClientEngineImpl;
+import com.hazelcast.cluster.impl.ClusterServiceImpl;
+import com.hazelcast.concurrent.lock.LockService;
 import com.hazelcast.instance.HazelcastInstanceImpl;
 import com.hazelcast.instance.Node;
 import com.hazelcast.instance.OutOfMemoryErrorDispatcher;
@@ -71,8 +73,10 @@ public class HealthMonitor extends Thread {
     private final Runtime runtime;
     private final HealthMonitorLevel logLevel;
     private final int delaySeconds;
+    private final ClusterServiceImpl clusterService;
     private final ExecutionService executionService;
     private final EventService eventService;
+    private final LockService lockService;
     private final OperationService operationService;
     private final ProxyService proxyService;
     private final ConnectionManager connectionManager;
@@ -89,8 +93,10 @@ public class HealthMonitor extends Thread {
         this.logLevel = logLevel;
         this.delaySeconds = delaySeconds;
         this.threadMxBean = ManagementFactory.getThreadMXBean();
+        this.clusterService = node.getClusterService();
         this.executionService = node.nodeEngine.getExecutionService();
         this.eventService = node.nodeEngine.getEventService();
+        this.lockService = node.nodeEngine.getSharedService(LockService.SERVICE_NAME);
         this.operationService = node.nodeEngine.getOperationService();
         this.proxyService = node.nodeEngine.getProxyService();
         this.clientEngine = node.clientEngine;
@@ -148,17 +154,22 @@ public class HealthMonitor extends Thread {
         private final double systemCpuLoad;
         private final int threadCount;
         private final int peakThreadCount;
+        private final long clusterTimeDiff;
         private final int asyncExecutorQueueSize;
         private final int clientExecutorQueueSize;
         private final int queryExecutorQueueSize;
         private final int scheduledExecutorQueueSize;
         private final int systemExecutorQueueSize;
         private final int eventQueueSize;
+        private final int lockCount;
         private final int operationServiceOperationExecutorQueueSize;
         private final int operationServiceOperationPriorityExecutorQueueSize;
         private final int operationServiceOperationResponseQueueSize;
+        private final String responseStats;
         private final int runningOperationsCount;
         private final int remoteOperationsCount;
+        private final long executedOperationsCount;
+        private final String remoteOperationStats;
         private final int proxyCount;
         private final int clientEndpointCount;
         private final int activeConnectionCount;
@@ -179,6 +190,7 @@ public class HealthMonitor extends Thread {
             systemCpuLoad = readLongAttribute("SystemCpuLoad", -1L);
             threadCount = threadMxBean.getThreadCount();
             peakThreadCount = threadMxBean.getPeakThreadCount();
+            clusterTimeDiff = clusterService.getClusterTimeDiff();
             asyncExecutorQueueSize = executionService.getExecutor(ExecutionService.ASYNC_EXECUTOR).getQueueSize();
             clientExecutorQueueSize = executionService.getExecutor(ExecutionService.CLIENT_EXECUTOR).getQueueSize();
             queryExecutorQueueSize = executionService.getExecutor(ExecutionService.QUERY_EXECUTOR).getQueueSize();
@@ -186,11 +198,15 @@ public class HealthMonitor extends Thread {
             systemExecutorQueueSize = executionService.getExecutor(ExecutionService.SYSTEM_EXECUTOR).getQueueSize();
             ioExecutorQueueSize = executionService.getExecutor(ExecutionService.IO_EXECUTOR).getQueueSize();
             eventQueueSize = eventService.getEventQueueSize();
+            lockCount = lockService.getAllLocks().size();
             operationServiceOperationExecutorQueueSize = operationService.getOperationExecutorQueueSize();
             operationServiceOperationPriorityExecutorQueueSize = operationService.getPriorityOperationExecutorQueueSize();
             operationServiceOperationResponseQueueSize = operationService.getResponseQueueSize();
+            responseStats = operationService.getResponseStats();
             runningOperationsCount = operationService.getRunningOperationsCount();
             remoteOperationsCount = operationService.getRemoteOperationsCount();
+            executedOperationsCount = operationService.getExecutedOperationCount();
+            remoteOperationStats = operationService.getRemoteOperationStats();
             proxyCount = proxyService.getProxyCount();
             clientEndpointCount = clientEngine.getClientEndpointCount();
             activeConnectionCount = connectionManager.getActiveConnectionCount();
@@ -252,6 +268,7 @@ public class HealthMonitor extends Thread {
             sb.append("load.systemAverage=").append(format("%.2f", systemLoadAverage)).append("%, ");
             sb.append("thread.count=").append(threadCount).append(", ");
             sb.append("thread.peakCount=").append(peakThreadCount).append(", ");
+            sb.append("cluster.timeDiff=").append(clusterTimeDiff).append(", ");
             sb.append("event.q.size=").append(eventQueueSize).append(", ");
             sb.append("executor.q.async.size=").append(asyncExecutorQueueSize).append(", ");
             sb.append("executor.q.client.size=").append(clientExecutorQueueSize).append(", ");
@@ -263,8 +280,12 @@ public class HealthMonitor extends Thread {
             sb.append("executor.q.priorityOperation.size=").
                     append(operationServiceOperationPriorityExecutorQueueSize).append(", ");
             sb.append("executor.q.response.size=").append(operationServiceOperationResponseQueueSize).append(", ");
+            sb.append("executor.q.response.stats=(").append(responseStats).append("), ");
+            sb.append("lock.count=").append(lockCount).append(", ");
             sb.append("operations.remote.size=").append(remoteOperationsCount).append(", ");
             sb.append("operations.running.size=").append(runningOperationsCount).append(", ");
+            sb.append("operations.executed.count=").append(executedOperationsCount).append(", ");
+            sb.append("operations.remote.stats=(").append(remoteOperationStats).append("), ");
             sb.append("proxy.count=").append(proxyCount).append(", ");
             sb.append("clientEndpoint.count=").append(clientEndpointCount).append(", ");
             sb.append("connection.active.count=").append(activeConnectionCount).append(", ");
