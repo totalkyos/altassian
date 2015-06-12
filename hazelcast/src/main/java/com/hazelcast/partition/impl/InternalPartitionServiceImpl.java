@@ -1420,9 +1420,17 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
             return false;
         }
 
-        boolean isEmpty = checkIsEmpty();
-        for (long timeoutInMillis = timeunit.toMillis(timeout); timeoutInMillis > 0 && !isEmpty; isEmpty = checkIsEmpty()) {
-            timeoutInMillis = sleepWithBusyWait(timeoutInMillis, DEFAULT_PAUSE_MILLIS);
+        long timeoutInMillis = timeunit.toMillis(timeout);
+        ExponentialBackoffSleeper sleeper = ExponentialBackoffSleeper.builder()
+                .factor(1.3)
+                .initialMs(25)
+                .maxMs(DEFAULT_PAUSE_MILLIS)
+                .timeoutMs(timeoutInMillis)
+                .build();
+
+        boolean isEmpty = false;
+        while (!sleeper.isTimedOut() && !(isEmpty = checkIsEmpty())) {
+            sleeper.sleepQuietly();
         }
 
         if (isEmpty) {
