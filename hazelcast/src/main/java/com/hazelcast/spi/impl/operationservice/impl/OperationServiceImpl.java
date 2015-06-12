@@ -92,6 +92,7 @@ public final class OperationServiceImpl implements InternalOperationService {
     final ILogger invocationLogger;
     final ManagedExecutorService asyncExecutor;
     final AtomicLong executedOperationsCount = new AtomicLong();
+    final AtomicLong executedRemoteOperationsCount = new AtomicLong();
 
     final NodeEngineImpl nodeEngine;
     final Node node;
@@ -199,6 +200,11 @@ public final class OperationServiceImpl implements InternalOperationService {
     @Override
     public long getExecutedOperationCount() {
         return executedOperationsCount.get();
+    }
+
+    @Override
+    public long getExecutedRemoteOperationCount() {
+        return executedRemoteOperationsCount.get();
     }
 
     @Override
@@ -376,6 +382,7 @@ public final class OperationServiceImpl implements InternalOperationService {
         if (nodeEngine.getThisAddress().equals(target)) {
             throw new IllegalArgumentException("Target is this node! -> " + target + ", response: " + response);
         }
+        executedRemoteOperationsCount.incrementAndGet();
 
         Data data = nodeEngine.toData(response);
         Packet packet = new Packet(data);
