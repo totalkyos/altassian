@@ -419,7 +419,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
         // the connection and no longer be available. If that's the case the Master will have no choice but to
         // host the partitions.
         Collection<MemberImpl> members = node.getClusterService().getMemberList(PARTITION_HOST);
-        if (members.isEmpty()) {
+        if (members.isEmpty() && !node.isLiteMember()) {
             members.add(nodeEngine.getClusterService().getMember(node.getMasterAddress()));
         }
         return members;

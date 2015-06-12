@@ -2,6 +2,7 @@ package com.hazelcast.partition.impl;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.nio.Address;
 import com.hazelcast.partition.NoDataMemberInClusterException;
 import com.hazelcast.test.AssertTask;
@@ -14,6 +15,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
@@ -29,7 +31,7 @@ import static org.junit.Assert.fail;
 public class InternalPartitionServiceLiteMemberTest
         extends HazelcastTestSupport {
 
-    private final Config liteMemberConfig = new Config().setLiteMember(true);
+    private final Config liteMemberConfig = new Config().setLiteMember(true).setCapabilities(EnumSet.noneOf(Capability.class));
 
     /**
      * PARTITION ASSIGNMENT

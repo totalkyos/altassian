@@ -58,6 +58,7 @@ public class MemberInfo implements DataSerializable {
         this.uuid = uuid;
         this.capabilities = capabilities;
         this.attributes = new HashMap<String, Object>(attributes);
+        this.liteMember = liteMember;
     }
 
     public MemberInfo(MemberImpl member) {
