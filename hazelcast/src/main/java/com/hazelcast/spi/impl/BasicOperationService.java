@@ -124,6 +124,7 @@ final class BasicOperationService implements InternalOperationService {
     private final AtomicLong executedOperationsCount = new AtomicLong();
     private boolean doCountRemoteOperations = false;
     private final AtomicLong executedRemoteOperationsCount = new AtomicLong();
+    private final AtomicLong previousExecutedRemoteOperationsCount = new AtomicLong();
     private final AtomicLong serializationTime = new AtomicLong();
     private final AtomicLong worstSerializationTime = new AtomicLong();
     private String worstOperation = null;
@@ -206,11 +207,19 @@ final class BasicOperationService implements InternalOperationService {
     }
 
     @Override
+    public long getExecutedRemoteOperationCount() {
+        return executedRemoteOperationsCount.get();
+    }
+
+    @Override
     public String getRemoteOperationStats() {
         doCountRemoteOperations = true;     // Only start collecting the stats when somebody asks for them.
         StringBuilder sb = new StringBuilder();
 
-        long executedRemoteOperationsCountValue = appendAndClear(sb, executedRemoteOperationsCount, "executed");
+        long executedRemoteOperationsCountValue = executedRemoteOperationsCount.get();
+        long previousExecutedRemoteOperationsCountValue = previousExecutedRemoteOperationsCount.getAndSet(executedRemoteOperationsCountValue);
+        long executedRemoteOperations = executedRemoteOperationsCountValue - previousExecutedRemoteOperationsCountValue;
+        sb.append("executed=").append(executedRemoteOperations).append(", ");
 
         // Don't dump all operation names, just those whose frequency exceeds a threshold of "significance."
         long significantRemoteOperationCount = (long)(executedRemoteOperationsCountValue * REMOTE_OPERATION_STATISTICS_THRESHOLD);

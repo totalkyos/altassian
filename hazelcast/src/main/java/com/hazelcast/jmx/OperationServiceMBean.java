@@ -72,6 +72,12 @@ public class OperationServiceMBean extends HazelcastMBean<OperationService> {
         return managedObject.getExecutedOperationCount();
     }
 
+    @ManagedAnnotation("executedRemoteOperationCount")
+    @ManagedDescription("The number of executed remote operations")
+    public long getExecutedRemoteOperationCount() {
+        return managedObject.getExecutedRemoteOperationCount();
+    }
+
     @ManagedAnnotation("operationThreadCount")
     @ManagedDescription("Number of threads executing operations")
     public long getOperationThreadCount() {

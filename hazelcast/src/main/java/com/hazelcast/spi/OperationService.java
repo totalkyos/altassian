@@ -49,6 +49,8 @@ public interface OperationService {
 
     long getExecutedOperationCount();
 
+    long getExecutedRemoteOperationCount();
+
     /**
      * Dumps all kinds of metrics, e.g. performance. This can be used for performance analysis. In the future we'll have a
      * more formal (e.g map with key/value pairs) information.
