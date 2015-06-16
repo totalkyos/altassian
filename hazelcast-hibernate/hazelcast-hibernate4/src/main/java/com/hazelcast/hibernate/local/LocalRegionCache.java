@@ -24,6 +24,7 @@ import com.hazelcast.hibernate.RegionCache;
 import com.hazelcast.hibernate.serialization.Expirable;
 import com.hazelcast.hibernate.serialization.ExpiryMarker;
 import com.hazelcast.hibernate.serialization.Value;
+import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
 import com.hazelcast.util.Clock;
 import org.hibernate.cache.spi.CacheDataDescription;
@@ -52,6 +53,8 @@ public class LocalRegionCache implements RegionCache {
     protected final Comparator versionComparator;
     protected final AtomicLong markerIdCounter;
     protected MapConfig config;
+
+    private final ILogger log = Logger.getLogger(LocalRegionCache.class);
 
     /**
      * @param name              the name for this region cache, which is also used to retrieve configuration/topic
@@ -83,7 +86,7 @@ public class LocalRegionCache implements RegionCache {
         try {
             config = hazelcastInstance != null ? hazelcastInstance.getConfig().findMapConfig(name) : null;
         } catch (UnsupportedOperationException e) {
-            Logger.getLogger(LocalRegionCache.class).finest(e);
+            log.finest(e);
         }
         versionComparator = metadata != null && metadata.isVersioned() ? metadata.getVersionComparator() : null;
         cache = new ConcurrentHashMap<Object, Expirable>();
@@ -187,18 +190,28 @@ public class LocalRegionCache implements RegionCache {
     protected MessageListener<Object> createMessageListener() {
         return new MessageListener<Object>() {
             public void onMessage(final Message<Object> message) {
+                if (message.getPublishingMember().localMember()) {
+                    return;
+                }
                 final Invalidation invalidation = (Invalidation) message.getMessageObject();
-                if (versionComparator != null) {
-                    final Expirable value = cache.get(invalidation.getKey());
-                    if (value != null) {
-                        Object currentVersion = value.getVersion();
-                        Object newVersion = invalidation.getVersion();
-                        if (versionComparator.compare(newVersion, currentVersion) > 0) {
-                            cache.remove(invalidation.getKey(), value);
+                Object key = invalidation.getKey();
+                if (key != null) {
+                    if (versionComparator != null) {
+                        final Expirable value = cache.get(key);
+                        if (value != null) {
+                            Object newVersion = invalidation.getVersion();
+                            if (newVersion != null) {
+                                Object currentVersion = value.getVersion();
+                                if (versionComparator.compare(newVersion, currentVersion) > 0) {
+                                    cache.remove(key, value);
+                                    return;
+                                }
+                            }
                         }
                     }
+                    cache.remove(key);
                 } else {
-                    cache.remove(invalidation.getKey());
+                    cache.clear();
                 }
             }
         };
@@ -206,11 +219,8 @@ public class LocalRegionCache implements RegionCache {
 
     public boolean remove(final Object key) {
         final Expirable value = cache.remove(key);
-        if (value != null) {
-            maybeNotifyTopic(key, null, value.getVersion());
-            return true;
-        }
-        return false;
+        maybeNotifyTopic(key, null, (value != null) ? value.getVersion() : null);
+        return (value != null);
     }
 
     public SoftLock tryLock(final Object key, final Object version) {
@@ -254,6 +264,7 @@ public class LocalRegionCache implements RegionCache {
                 break;
             }
         }
+        maybeNotifyTopic(key, null, null);
     }
 
     public boolean contains(final Object key) {
@@ -262,6 +273,7 @@ public class LocalRegionCache implements RegionCache {
 
     public void clear() {
         cache.clear();
+        maybeNotifyTopic(null, null, null);
     }
 
     public long size() {
