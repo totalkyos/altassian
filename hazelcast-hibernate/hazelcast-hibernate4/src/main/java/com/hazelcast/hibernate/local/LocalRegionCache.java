@@ -194,7 +194,7 @@ public class LocalRegionCache implements RegionCache {
         return new MessageListener<Object>() {
             public void onMessage(final Message<Object> message) {
                 if (!message.getPublishingMember().localMember()) {
-                    maybeInvalidate((Invalidation) message.getMessageObject());
+                    maybeInvalidate(message.getMessageObject());
                 }
             }
         };
@@ -293,7 +293,8 @@ public class LocalRegionCache implements RegionCache {
         }
     }
 
-    private void maybeInvalidate(Invalidation invalidation) {
+    protected void maybeInvalidate(final Object messageObject) {
+        Invalidation invalidation = (Invalidation) messageObject;
         Object key = invalidation.getKey();
         if (key == null) {
             // Invalidate the entire region cache.
