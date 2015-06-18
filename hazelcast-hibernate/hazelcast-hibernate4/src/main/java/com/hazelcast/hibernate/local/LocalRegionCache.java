@@ -202,7 +202,7 @@ public class LocalRegionCache implements RegionCache {
 
     public boolean remove(final Object key) {
         final Expirable value = cache.remove(key);
-        maybeNotifyTopic(key, null, (value != null) ? value.getVersion() : null);
+        maybeNotifyTopic(key, null, (value == null) ? null : value.getVersion());
         return (value != null);
     }
 
@@ -309,9 +309,8 @@ public class LocalRegionCache implements RegionCache {
                 if (value != null) {
                     Object newVersion = invalidation.getVersion();
                     if (newVersion == null) {
-                        // This invalidation was either for an entity with unknown version OR for a collection (which
-                        // are unversioned) relating to an entity with a valid versionComparator.  Just invalidate the
-                        // key unconditionally.
+                        // This invalidation was for an entity with unknown version.  Just invalidate the entry
+                        // unconditionally.
                         cache.remove(key);
                     } else {
                         // Invalidate the entry only if it was of a lower version.
