@@ -193,28 +193,8 @@ public class LocalRegionCache implements RegionCache {
     protected MessageListener<Object> createMessageListener() {
         return new MessageListener<Object>() {
             public void onMessage(final Message<Object> message) {
-                if (message.getPublishingMember().localMember()) {
-                    return;
-                }
-                final Invalidation invalidation = (Invalidation) message.getMessageObject();
-                Object key = invalidation.getKey();
-                if (key != null) {
-                    if (versionComparator != null) {
-                        final Expirable value = cache.get(key);
-                        if (value != null) {
-                            Object newVersion = invalidation.getVersion();
-                            if (newVersion != null) {
-                                Object currentVersion = value.getVersion();
-                                if (versionComparator.compare(newVersion, currentVersion) > 0) {
-                                    cache.remove(key, value);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                    cache.remove(key);
-                } else {
-                    cache.clear();
+                if (!message.getPublishingMember().localMember()) {
+                    maybeInvalidate((Invalidation) message.getMessageObject());
                 }
             }
         };
@@ -310,6 +290,39 @@ public class LocalRegionCache implements RegionCache {
             if (evictionRate > 0 && entries != null) {
                 evictEntries(entries, evictionRate);
             }
+        }
+    }
+
+    private void maybeInvalidate(Invalidation invalidation) {
+        Object key = invalidation.getKey();
+        if (key == null) {
+            // Invalidate the entire region cache.
+            cache.clear();
+        } else {
+            if (versionComparator == null) {
+                // For an unversioned entity or collection we can only invalidate the entry.
+                cache.remove(key);
+            } else {
+                // For versioned entities we can avoid the invalidation if both we and the remote node know the version
+                // and our version is definitely equal or higher.  Otherwise, we have to just invalidate our entry.
+                final Expirable value = cache.get(key);
+                if (value != null) {
+                    Object newVersion = invalidation.getVersion();
+                    if (newVersion == null) {
+                        // This invalidation was either for an entity with unknown version OR for a collection (which
+                        // are unversioned) relating to an entity with a valid versionComparator.  Just invalidate the
+                        // key unconditionally.
+                        cache.remove(key);
+                    } else {
+                        // Invalidate the entry only if it was of a lower version.
+                        Object currentVersion = value.getVersion();
+                        if (versionComparator.compare(newVersion, currentVersion) < 0) {
+                            cache.remove(key, value);
+                        }
+                    }
+                }
+            }
+
         }
     }
 
