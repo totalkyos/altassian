@@ -77,10 +77,16 @@ public class ReadOnlyAccessDelegate<T extends HazelcastRegion> extends NonStrict
     }
 
     /**
-     * This will issue a log warning stating that an attempt was made to unlock an item from a read-only cache region.
+     * {@inheritDoc}
+     * <p/>
+     * Should be a no-op since this cache is read-only
      */
     @Override
     public void unlockItem(final Object key, final SoftLock lock) throws CacheException {
+        /*
+         * To err on the safe side though, follow ReadOnlyEhcacheEntityRegionAccessStrategy which nevertheless evicts
+         * the key.
+         */
         evict(key);
     }
 
