@@ -300,8 +300,8 @@ public class LocalRegionCache implements RegionCache {
                 // For an unversioned entity or collection we can only invalidate the entry.
                 cache.remove(key);
             } else {
-                // For versioned entities we can avoid the invalidation if both we and the remote node know the version
-                // and our version is definitely equal or higher.  Otherwise, we have to just invalidate our entry.
+                // For versioned entities we can avoid the invalidation if both we and the remote node know the version,
+                // AND our version is definitely equal or higher.  Otherwise, we have to just invalidate our entry.
                 final Expirable value = cache.get(key);
                 if (value != null) {
                     Object newVersion = invalidation.getVersion();
@@ -310,9 +310,9 @@ public class LocalRegionCache implements RegionCache {
                         // unconditionally.
                         cache.remove(key);
                     } else {
-                        // Invalidate the entry only if it was of a lower version.
+                        // Invalidate our entry only if it was of a lower version.
                         Object currentVersion = value.getVersion();
-                        if (versionComparator.compare(newVersion, currentVersion) < 0) {
+                        if (versionComparator.compare(currentVersion, newVersion) < 0) {
                             cache.remove(key, value);
                         }
                     }
