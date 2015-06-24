@@ -35,7 +35,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
-import org.junit.Ignore;
 
 import java.util.concurrent.CountDownLatch;
 
@@ -48,9 +47,9 @@ import static org.junit.Assert.fail;
 @Category(QuickTest.class)
 public class ClientTxnTest extends HazelcastTestSupport {
 
-    static HazelcastInstance hz;
-    static HazelcastInstance server;
-    static HazelcastInstance second;
+    HazelcastInstance hz;
+    HazelcastInstance server;
+    HazelcastInstance second;
 
     @Before
     public void init() {

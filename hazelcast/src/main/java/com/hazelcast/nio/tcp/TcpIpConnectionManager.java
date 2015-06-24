@@ -30,7 +30,7 @@ import com.hazelcast.nio.IOUtil;
 import com.hazelcast.nio.MemberSocketInterceptor;
 import com.hazelcast.nio.Packet;
 import com.hazelcast.nio.serialization.Data;
-import com.hazelcast.nio.tcp.handlermigration.IOBalancer;
+import com.hazelcast.nio.tcp.iobalancer.IOBalancer;
 import com.hazelcast.util.ConcurrencyUtil;
 import com.hazelcast.util.ConstructorFunction;
 import com.hazelcast.util.executor.StripedRunnable;
@@ -111,8 +111,6 @@ public class TcpIpConnectionManager implements ConnectionManager {
 
     private final int outboundPortCount;
 
-    private final int handlerMigrationIntervalSeconds;
-
     private final HazelcastThreadGroup hazelcastThreadGroup;
 
     // accessed only in synchronized block
@@ -137,7 +135,6 @@ public class TcpIpConnectionManager implements ConnectionManager {
         this.socketKeepAlive = ioService.getSocketKeepAlive();
         this.socketNoDelay = ioService.getSocketNoDelay();
         this.selectorThreadCount = ioService.getSelectorThreadCount();
-        this.handlerMigrationIntervalSeconds = ioService.getBalancerIntervalSeconds();
         this.inSelectors = new InSelectorImpl[selectorThreadCount];
         this.outSelectors = new OutSelectorImpl[selectorThreadCount];
         final Collection<Integer> ports = ioService.getOutboundPorts();
@@ -257,6 +254,7 @@ public class TcpIpConnectionManager implements ConnectionManager {
                 tcpConnection.setMonitor(connectionMonitor);
             }
         }
+        ioBalancer.connectionAdded(connection);
         connectionsMap.put(remoteEndPoint, connection);
         connectionsInProgress.remove(remoteEndPoint);
         ioService.getEventService().executeEventCallback(new StripedRunnable() {
@@ -320,7 +318,6 @@ public class TcpIpConnectionManager implements ConnectionManager {
 
         final TcpIpConnection connection = new TcpIpConnection(this, inSelectors[index],
                 outSelectors[index], connectionIdGen.incrementAndGet(), channel);
-        ioBalancer.connectionAdded(connection);
 
         connection.setEndPoint(endpoint);
         activeConnections.add(connection);
@@ -458,7 +455,7 @@ public class TcpIpConnectionManager implements ConnectionManager {
 
     private void startIOBalancer() {
         ioBalancer = new IOBalancer(inSelectors, outSelectors,
-                hazelcastThreadGroup, handlerMigrationIntervalSeconds, loggingService);
+                hazelcastThreadGroup, ioService.getBalancerIntervalSeconds(), loggingService);
         ioBalancer.start();
     }
 

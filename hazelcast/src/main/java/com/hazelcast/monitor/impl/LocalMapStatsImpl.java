@@ -74,7 +74,6 @@ public class LocalMapStatsImpl implements LocalMapStats {
     private volatile long maxPutLatency;
     private volatile long maxRemoveLatency;
 
-
     private volatile long creationTime;
     private volatile long ownedEntryCount;
     private volatile long backupEntryCount;
@@ -293,6 +292,7 @@ public class LocalMapStatsImpl implements LocalMapStats {
         this.nearCacheStats = nearCacheStats;
     }
 
+    @Override
     public JsonObject toJson() {
         JsonObject root = new JsonObject();
         root.add("getCount", getCount);
@@ -349,7 +349,7 @@ public class LocalMapStatsImpl implements LocalMapStats {
         lockedEntryCount = getLong(json, "lockedEntryCount", -1L);
         dirtyEntryCount = getLong(json, "dirtyEntryCount", -1L);
         heapCost = getLong(json, "heapCost", -1L);
-        final JsonValue jsonNearCacheStats = json.get("nearCacheStats");
+        JsonValue jsonNearCacheStats = json.get("nearCacheStats");
         if (jsonNearCacheStats != null) {
             nearCacheStats = new NearCacheStatsImpl();
             nearCacheStats.fromJson(jsonNearCacheStats.asObject());

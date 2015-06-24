@@ -61,116 +61,6 @@ public class MemberStateImpl implements MemberState {
     }
 
     @Override
-    public JsonObject toJson() {
-        JsonObject root = new JsonObject();
-        root.add("address", address);
-        JsonObject mapStatsObject = new JsonObject();
-        for (Map.Entry<String, LocalMapStats> entry : mapStats.entrySet()) {
-            mapStatsObject.add(entry.getKey(), entry.getValue().toJson());
-        }
-        root.add("mapStats", mapStatsObject);
-        JsonObject multimapStatsObject = new JsonObject();
-        for (Map.Entry<String, LocalMultiMapStats> entry : multiMapStats.entrySet()) {
-            multimapStatsObject.add(entry.getKey(), entry.getValue().toJson());
-        }
-        root.add("multiMapStats", multimapStatsObject);
-        JsonObject queueStatsObject = new JsonObject();
-        for (Map.Entry<String, LocalQueueStats> entry : queueStats.entrySet()) {
-            queueStatsObject.add(entry.getKey(), entry.getValue().toJson());
-        }
-        root.add("queueStats", queueStatsObject);
-        JsonObject topicStatsObject = new JsonObject();
-        for (Map.Entry<String, LocalTopicStats> entry : topicStats.entrySet()) {
-            topicStatsObject.add(entry.getKey(), entry.getValue().toJson());
-        }
-        root.add("topicStats", topicStatsObject);
-        JsonObject executorStatsObject = new JsonObject();
-        for (Map.Entry<String, LocalExecutorStats> entry : executorStats.entrySet()) {
-            executorStatsObject.add(entry.getKey(), entry.getValue().toJson());
-        }
-        root.add("executorStats", executorStatsObject);
-        JsonObject cacheStatsObject = new JsonObject();
-        for (Map.Entry<String, LocalCacheStats> entry : cacheStats.entrySet()) {
-            cacheStatsObject.add(entry.getKey(), entry.getValue().toJson());
-        }
-        root.add("cacheStats", cacheStatsObject);
-        JsonObject runtimePropsObject = new JsonObject();
-        for (Map.Entry<String, Long> entry : runtimeProps.entrySet()) {
-            runtimePropsObject.add(entry.getKey(), entry.getValue());
-        }
-        root.add("runtimeProps", runtimePropsObject);
-        JsonArray clientsArray = new JsonArray();
-        for (ClientEndPointDTO client : clients) {
-            clientsArray.add(client.toJson());
-        }
-        root.add("clients", clientsArray);
-        root.add("beans", beans.toJson());
-        root.add("memoryStats", memoryStats.toJson());
-        root.add("operationStats", operationStats.toJson());
-        root.add("memberPartitionState", memberPartitionState.toJson());
-        return root;
-    }
-
-    @Override
-    public void fromJson(JsonObject json) {
-        address = getString(json, "address");
-        for (JsonObject.Member next : getObject(json, "mapStats")) {
-            LocalMapStatsImpl stats = new LocalMapStatsImpl();
-            stats.fromJson(next.getValue().asObject());
-            mapStats.put(next.getName(), stats);
-        }
-        for (JsonObject.Member next : getObject(json, "multiMapStats")) {
-            LocalMultiMapStatsImpl stats = new LocalMultiMapStatsImpl();
-            stats.fromJson(next.getValue().asObject());
-            multiMapStats.put(next.getName(), stats);
-        }
-        for (JsonObject.Member next : getObject(json, "queueStats")) {
-            LocalQueueStatsImpl stats = new LocalQueueStatsImpl();
-            stats.fromJson(next.getValue().asObject());
-            queueStats.put(next.getName(), stats);
-        }
-        for (JsonObject.Member next : getObject(json, "topicStats")) {
-            LocalTopicStatsImpl stats = new LocalTopicStatsImpl();
-            stats.fromJson(next.getValue().asObject());
-            topicStats.put(next.getName(), stats);
-        }
-        for (JsonObject.Member next : getObject(json, "executorStats")) {
-            LocalExecutorStatsImpl stats = new LocalExecutorStatsImpl();
-            stats.fromJson(next.getValue().asObject());
-            executorStats.put(next.getName(), stats);
-        }
-        for (JsonObject.Member next : getObject(json, "cacheStats", new JsonObject())) {
-            LocalCacheStats stats = new LocalCacheStatsImpl();
-            stats.fromJson(next.getValue().asObject());
-            cacheStats.put(next.getName(), stats);
-        }
-        for (JsonObject.Member next : getObject(json, "runtimeProps")) {
-            runtimeProps.put(next.getName(), next.getValue().asLong());
-        }
-        final JsonArray jsonClients = getArray(json, "clients");
-        for (JsonValue jsonClient : jsonClients) {
-            final ClientEndPointDTO client = new ClientEndPointDTO();
-            client.fromJson(jsonClient.asObject());
-            clients.add(client);
-        }
-        beans = new MXBeansDTO();
-        beans.fromJson(getObject(json, "beans"));
-        JsonObject jsonMemoryStats = getObject(json, "memoryStats", null);
-        if (jsonMemoryStats != null) {
-            memoryStats.fromJson(jsonMemoryStats);
-        }
-        JsonObject jsonOperationStats = getObject(json, "operationStats", null);
-        if (jsonOperationStats != null) {
-            operationStats.fromJson(jsonOperationStats);
-        }
-        JsonObject jsonMemberPartitionState = getObject(json, "memberPartitionState", null);
-        if (jsonMemberPartitionState != null) {
-            memberPartitionState = new MemberPartitionStateImpl();
-            memberPartitionState.fromJson(jsonMemberPartitionState);
-        }
-    }
-
-    @Override
     public Map<String, Long> getRuntimeProps() {
         return runtimeProps;
     }
@@ -283,64 +173,113 @@ public class MemberStateImpl implements MemberState {
     }
 
     @Override
-    public int hashCode() {
-        int result = address != null ? address.hashCode() : 0;
-        result = 31 * result + (mapStats != null ? mapStats.hashCode() : 0);
-        result = 31 * result + (multiMapStats != null ? multiMapStats.hashCode() : 0);
-        result = 31 * result + (queueStats != null ? queueStats.hashCode() : 0);
-        result = 31 * result + (topicStats != null ? topicStats.hashCode() : 0);
-        result = 31 * result + (executorStats != null ? executorStats.hashCode() : 0);
-        result = 31 * result + (cacheStats != null ? cacheStats.hashCode() : 0);
-        result = 31 * result + (memberPartitionState != null ? memberPartitionState.hashCode() : 0);
-        return result;
+    public JsonObject toJson() {
+        JsonObject root = new JsonObject();
+        root.add("address", address);
+        JsonObject mapStatsObject = new JsonObject();
+        for (Map.Entry<String, LocalMapStats> entry : mapStats.entrySet()) {
+            mapStatsObject.add(entry.getKey(), entry.getValue().toJson());
+        }
+        root.add("mapStats", mapStatsObject);
+        JsonObject multimapStatsObject = new JsonObject();
+        for (Map.Entry<String, LocalMultiMapStats> entry : multiMapStats.entrySet()) {
+            multimapStatsObject.add(entry.getKey(), entry.getValue().toJson());
+        }
+        root.add("multiMapStats", multimapStatsObject);
+        JsonObject queueStatsObject = new JsonObject();
+        for (Map.Entry<String, LocalQueueStats> entry : queueStats.entrySet()) {
+            queueStatsObject.add(entry.getKey(), entry.getValue().toJson());
+        }
+        root.add("queueStats", queueStatsObject);
+        JsonObject topicStatsObject = new JsonObject();
+        for (Map.Entry<String, LocalTopicStats> entry : topicStats.entrySet()) {
+            topicStatsObject.add(entry.getKey(), entry.getValue().toJson());
+        }
+        root.add("topicStats", topicStatsObject);
+        JsonObject executorStatsObject = new JsonObject();
+        for (Map.Entry<String, LocalExecutorStats> entry : executorStats.entrySet()) {
+            executorStatsObject.add(entry.getKey(), entry.getValue().toJson());
+        }
+        root.add("executorStats", executorStatsObject);
+        JsonObject cacheStatsObject = new JsonObject();
+        for (Map.Entry<String, LocalCacheStats> entry : cacheStats.entrySet()) {
+            cacheStatsObject.add(entry.getKey(), entry.getValue().toJson());
+        }
+        root.add("cacheStats", cacheStatsObject);
+        JsonObject runtimePropsObject = new JsonObject();
+        for (Map.Entry<String, Long> entry : runtimeProps.entrySet()) {
+            runtimePropsObject.add(entry.getKey(), entry.getValue());
+        }
+        root.add("runtimeProps", runtimePropsObject);
+        JsonArray clientsArray = new JsonArray();
+        for (ClientEndPointDTO client : clients) {
+            clientsArray.add(client.toJson());
+        }
+        root.add("clients", clientsArray);
+        root.add("beans", beans.toJson());
+        root.add("memoryStats", memoryStats.toJson());
+        root.add("operationStats", operationStats.toJson());
+        root.add("memberPartitionState", memberPartitionState.toJson());
+        return root;
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
+    public void fromJson(JsonObject json) {
+        address = getString(json, "address");
+        for (JsonObject.Member next : getObject(json, "mapStats")) {
+            LocalMapStatsImpl stats = new LocalMapStatsImpl();
+            stats.fromJson(next.getValue().asObject());
+            mapStats.put(next.getName(), stats);
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
+        for (JsonObject.Member next : getObject(json, "multiMapStats")) {
+            LocalMultiMapStatsImpl stats = new LocalMultiMapStatsImpl();
+            stats.fromJson(next.getValue().asObject());
+            multiMapStats.put(next.getName(), stats);
         }
-
-        MemberStateImpl that = (MemberStateImpl) o;
-
-        if (address != null ? !address.equals(that.address) : that.address != null) {
-            return false;
+        for (JsonObject.Member next : getObject(json, "queueStats")) {
+            LocalQueueStatsImpl stats = new LocalQueueStatsImpl();
+            stats.fromJson(next.getValue().asObject());
+            queueStats.put(next.getName(), stats);
         }
-        if (executorStats != null ? !executorStats.equals(that.executorStats) : that.executorStats != null) {
-            return false;
+        for (JsonObject.Member next : getObject(json, "topicStats")) {
+            LocalTopicStatsImpl stats = new LocalTopicStatsImpl();
+            stats.fromJson(next.getValue().asObject());
+            topicStats.put(next.getName(), stats);
         }
-        if (mapStats != null ? !mapStats.equals(that.mapStats) : that.mapStats != null) {
-            return false;
+        for (JsonObject.Member next : getObject(json, "executorStats")) {
+            LocalExecutorStatsImpl stats = new LocalExecutorStatsImpl();
+            stats.fromJson(next.getValue().asObject());
+            executorStats.put(next.getName(), stats);
         }
-        if (multiMapStats != null ? !multiMapStats.equals(that.multiMapStats) : that.multiMapStats != null) {
-            return false;
+        for (JsonObject.Member next : getObject(json, "cacheStats", new JsonObject())) {
+            LocalCacheStats stats = new LocalCacheStatsImpl();
+            stats.fromJson(next.getValue().asObject());
+            cacheStats.put(next.getName(), stats);
         }
-        if (queueStats != null ? !queueStats.equals(that.queueStats) : that.queueStats != null) {
-            return false;
+        for (JsonObject.Member next : getObject(json, "runtimeProps")) {
+            runtimeProps.put(next.getName(), next.getValue().asLong());
         }
-        if (runtimeProps != null ? !runtimeProps.equals(that.runtimeProps) : that.runtimeProps != null) {
-            return false;
+        final JsonArray jsonClients = getArray(json, "clients");
+        for (JsonValue jsonClient : jsonClients) {
+            final ClientEndPointDTO client = new ClientEndPointDTO();
+            client.fromJson(jsonClient.asObject());
+            clients.add(client);
         }
-        if (topicStats != null ? !topicStats.equals(that.topicStats) : that.topicStats != null) {
-            return false;
+        beans = new MXBeansDTO();
+        beans.fromJson(getObject(json, "beans"));
+        JsonObject jsonMemoryStats = getObject(json, "memoryStats", null);
+        if (jsonMemoryStats != null) {
+            memoryStats.fromJson(jsonMemoryStats);
         }
-        if (cacheStats != null ? !cacheStats.equals(that.cacheStats) : that.cacheStats != null) {
-            return false;
+        JsonObject jsonOperationStats = getObject(json, "operationStats", null);
+        if (jsonOperationStats != null) {
+            operationStats.fromJson(jsonOperationStats);
         }
-        if (memoryStats != null ? !memoryStats.equals(that.memoryStats) : that.memoryStats != null) {
-            return false;
+        JsonObject jsonMemberPartitionState = getObject(json, "memberPartitionState", null);
+        if (jsonMemberPartitionState != null) {
+            memberPartitionState = new MemberPartitionStateImpl();
+            memberPartitionState.fromJson(jsonMemberPartitionState);
         }
-        if (operationStats != null ? !operationStats.equals(that.operationStats) : that.operationStats != null) {
-            return false;
-        }
-        if (memberPartitionState != null
-                ? !memberPartitionState.equals(that.memberPartitionState) : that.memberPartitionState != null) {
-            return false;
-        }
-        return true;
     }
 
     @Override

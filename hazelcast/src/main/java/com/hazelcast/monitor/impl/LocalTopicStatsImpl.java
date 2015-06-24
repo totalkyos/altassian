@@ -24,8 +24,7 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 import static com.hazelcast.util.JsonUtil.getLong;
 
-public class LocalTopicStatsImpl
-        implements LocalTopicStats {
+public class LocalTopicStatsImpl implements LocalTopicStats {
 
     private static final AtomicLongFieldUpdater<LocalTopicStatsImpl> TOTAL_PUBLISHES_UPDATER = AtomicLongFieldUpdater
             .newUpdater(LocalTopicStatsImpl.class, "totalPublishes");
@@ -47,22 +46,6 @@ public class LocalTopicStatsImpl
     }
 
     @Override
-    public JsonObject toJson() {
-        JsonObject root = new JsonObject();
-        root.add("creationTime", creationTime);
-        root.add("totalPublishes", totalPublishes);
-        root.add("totalReceivedMessages", totalReceivedMessages);
-        return root;
-    }
-
-    @Override
-    public void fromJson(JsonObject json) {
-        creationTime = getLong(json, "creationTime", -1L);
-        TOTAL_PUBLISHES_UPDATER.set(this, getLong(json, "totalPublishes", -1L));
-        TOTAL_RECEIVED_MESSAGES_UPDATER.set(this, getLong(json, "totalReceivedMessages", -1L));
-    }
-
-    @Override
     public long getPublishOperationCount() {
         return totalPublishes;
     }
@@ -80,4 +63,28 @@ public class LocalTopicStatsImpl
         TOTAL_RECEIVED_MESSAGES_UPDATER.incrementAndGet(this);
     }
 
+    @Override
+    public JsonObject toJson() {
+        JsonObject root = new JsonObject();
+        root.add("creationTime", creationTime);
+        root.add("totalPublishes", totalPublishes);
+        root.add("totalReceivedMessages", totalReceivedMessages);
+        return root;
+    }
+
+    @Override
+    public void fromJson(JsonObject json) {
+        creationTime = getLong(json, "creationTime", -1L);
+        TOTAL_PUBLISHES_UPDATER.set(this, getLong(json, "totalPublishes", -1L));
+        TOTAL_RECEIVED_MESSAGES_UPDATER.set(this, getLong(json, "totalReceivedMessages", -1L));
+    }
+
+    @Override
+    public String toString() {
+        return "LocalTopicStatsImpl{"
+                + "creationTime=" + creationTime
+                + ", totalPublishes=" + totalPublishes
+                + ", totalReceivedMessages=" + totalReceivedMessages
+                + '}';
+    }
 }

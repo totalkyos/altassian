@@ -59,6 +59,7 @@ import com.hazelcast.spi.ResponseHandler;
 import com.hazelcast.spi.impl.NodeEngineImpl;
 import com.hazelcast.spi.impl.ResponseHandlerFactory;
 import com.hazelcast.util.Clock;
+import com.hazelcast.util.ExceptionUtil;
 import com.hazelcast.util.FutureUtil.ExceptionHandler;
 import com.hazelcast.util.scheduler.CoalescingDelayedTrigger;
 import com.hazelcast.util.scheduler.EntryTaskScheduler;
@@ -67,7 +68,18 @@ import com.hazelcast.util.scheduler.ScheduleType;
 import com.hazelcast.util.scheduler.ScheduledEntry;
 import com.hazelcast.util.scheduler.ScheduledEntryProcessor;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -252,10 +264,14 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
     }
 
     @Override
-    public Address getPartitionOwnerOrWait(int partition) throws InterruptedException {
+    public Address getPartitionOwnerOrWait(int partition) {
         Address owner = getPartitionOwner(partition);
         while (owner == null) {
-            Thread.sleep(PARTITION_OWNERSHIP_WAIT_MILLIS);
+            try {
+                Thread.sleep(PARTITION_OWNERSHIP_WAIT_MILLIS);
+            } catch (InterruptedException e) {
+                ExceptionUtil.rethrow(e);
+            }
             owner = getPartitionOwner(partition);
         }
         return owner;
@@ -1575,6 +1591,12 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
 
     public Node getNode() {
         return node;
+    }
+
+    @Override
+    public boolean isPartitionOwner(int partitionId) {
+        InternalPartitionImpl partition = getPartition(partitionId);
+        return node.getThisAddress().equals(partition.getOwnerOrNull());
     }
 
     @Override

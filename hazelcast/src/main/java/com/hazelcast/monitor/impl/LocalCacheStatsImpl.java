@@ -26,14 +26,14 @@ import static com.hazelcast.util.JsonUtil.getLong;
 
 /**
  * Default implementation of {@link com.hazelcast.monitor.LocalCacheStats}
- *
+ * <p/>
  * This class just provides serialization/deserialization methods to be used in
  * {@link com.hazelcast.monitor.MemberState} implementation while sending/receiving statistics to/from
  * Management center.
- *
+ * <p/>
  * There are no calculations are done in this class, all statistics gathered from
  * {@link com.hazelcast.cache.CacheStatistics}
- *
+ * <p/>
  * No setter methods are provided, all class fields supposed to be populated either
  * by a {@link com.hazelcast.cache.CacheStatistics} or while deserialization process
  * ({@link #fromJson(com.eclipsesource.json.JsonObject)}.
@@ -55,7 +55,8 @@ public class LocalCacheStatsImpl implements LocalCacheStats {
     private float averagePutTime;
     private float averageRemoveTime;
 
-    public LocalCacheStatsImpl() { }
+    public LocalCacheStatsImpl() {
+    }
 
     public LocalCacheStatsImpl(CacheStatistics cacheStatistics) {
         creationTime = Clock.currentTimeMillis();
@@ -183,5 +184,4 @@ public class LocalCacheStatsImpl implements LocalCacheStats {
                 + ", averageRemoveTime=" + averageRemoveTime
                 + '}';
     }
-
 }

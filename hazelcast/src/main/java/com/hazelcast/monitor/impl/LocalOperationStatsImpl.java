@@ -33,7 +33,6 @@ import static com.hazelcast.util.JsonUtil.getLong;
 /**
  * Hazelcast statistic implementations for local operations.
  */
-@SuppressWarnings("unused")
 public class LocalOperationStatsImpl implements LocalOperationStats {
 
     private long maxVisibleSlowOperationCount;
@@ -90,52 +89,6 @@ public class LocalOperationStatsImpl implements LocalOperationStats {
             slowOperations.add(slowOperationDTO);
         }
         creationTime = getLong(json, "creationTime", -1L);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (!(o instanceof LocalOperationStatsImpl)) {
-            return false;
-        }
-        LocalOperationStatsImpl that = (LocalOperationStatsImpl) o;
-        if (maxVisibleSlowOperationCount != that.maxVisibleSlowOperationCount) {
-            return false;
-        }
-        if (!isEqualSlowOperations(that.slowOperations)) {
-            return false;
-        }
-        if (creationTime != that.creationTime) {
-            return false;
-        }
-        return true;
-    }
-
-    private boolean isEqualSlowOperations(List<SlowOperationDTO> thatSlowOperations) {
-        if (slowOperations == null) {
-            if (thatSlowOperations != null) {
-                return false;
-            }
-            return true;
-        }
-
-        if (slowOperations.size() != thatSlowOperations.size()) {
-            return false;
-        }
-        if (!slowOperations.containsAll(thatSlowOperations)) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = slowOperations != null ? slowOperations.hashCode() : 0;
-        result = 31 * result + (int) (maxVisibleSlowOperationCount ^ (maxVisibleSlowOperationCount >>> 32));
-        result = 31 * result + (int) (creationTime ^ (creationTime >>> 32));
-        return result;
     }
 
     @Override

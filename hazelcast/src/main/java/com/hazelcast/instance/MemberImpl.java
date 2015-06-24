@@ -36,7 +36,11 @@ import com.hazelcast.util.Clock;
 import com.hazelcast.util.ExceptionUtil;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
 import static com.hazelcast.cluster.MemberAttributeOperationType.PUT;
 import static com.hazelcast.cluster.MemberAttributeOperationType.REMOVE;
@@ -78,8 +82,8 @@ public final class MemberImpl
         this.lastRead = Clock.currentTimeMillis();
         this.instance = instance;
 
-        this.capabilities = capabilities == null ? Collections.unmodifiableSet(EnumSet.noneOf(Capability.class)) :
-                Collections.unmodifiableSet(EnumSet.copyOf(capabilities));
+        this.capabilities = capabilities == null ? Collections.unmodifiableSet(EnumSet.noneOf(Capability.class))
+                : Collections.unmodifiableSet(EnumSet.copyOf(capabilities));
 
         if (attributes != null) {
             this.attributes.putAll(attributes);
@@ -90,8 +94,8 @@ public final class MemberImpl
         super(member);
         this.localMember = member.localMember;
         this.lastRead = member.lastRead;
-        this.capabilities = member.capabilities == null ? Collections.unmodifiableSet(EnumSet.noneOf(Capability.class)) :
-                Collections.unmodifiableSet(EnumSet.copyOf(member.capabilities));
+        this.capabilities = member.capabilities == null ? Collections.unmodifiableSet(EnumSet.noneOf(Capability.class))
+                : Collections.unmodifiableSet(EnumSet.copyOf(member.capabilities));
     }
 
     public Set<Capability> getCapabilities() {

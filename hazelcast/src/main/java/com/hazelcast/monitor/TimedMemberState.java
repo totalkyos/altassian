@@ -32,6 +32,7 @@ import static com.hazelcast.util.JsonUtil.getBoolean;
 import static com.hazelcast.util.JsonUtil.getLong;
 import static com.hazelcast.util.JsonUtil.getObject;
 import static com.hazelcast.util.JsonUtil.getString;
+import static com.hazelcast.util.StringUtil.getLineSeperator;
 
 public final class TimedMemberState implements Cloneable, JsonSerializable {
 
@@ -41,6 +42,54 @@ public final class TimedMemberState implements Cloneable, JsonSerializable {
     List<String> memberList;
     Boolean master;
     String clusterName;
+
+    public List<String> getMemberList() {
+        return memberList;
+    }
+
+    public void setMemberList(List<String> memberList) {
+        this.memberList = memberList;
+    }
+
+    public Boolean getMaster() {
+        return master;
+    }
+
+    public void setMaster(Boolean master) {
+        this.master = master;
+    }
+
+    public String getClusterName() {
+        return clusterName;
+    }
+
+    public void setClusterName(String clusterName) {
+        this.clusterName = clusterName;
+    }
+
+    public void setTime(long time) {
+        this.time = time;
+    }
+
+    public long getTime() {
+        return time;
+    }
+
+    public Set<String> getInstanceNames() {
+        return instanceNames;
+    }
+
+    public void setInstanceNames(Set<String> longInstanceNames) {
+        this.instanceNames = longInstanceNames;
+    }
+
+    public MemberStateImpl getMemberState() {
+        return memberState;
+    }
+
+    public void setMemberState(MemberStateImpl memberState) {
+        this.memberState = memberState;
+    }
 
     @Override
     public TimedMemberState clone() throws CloneNotSupportedException {
@@ -54,6 +103,7 @@ public final class TimedMemberState implements Cloneable, JsonSerializable {
         return state;
     }
 
+    @Override
     public JsonObject toJson() {
         JsonObject root = new JsonObject();
         root.add("master", master);
@@ -95,108 +145,10 @@ public final class TimedMemberState implements Cloneable, JsonSerializable {
         memberState.fromJson(jsonMemberState);
     }
 
-    public List<String> getMemberList() {
-        return memberList;
-    }
-
-    public void setMemberList(List<String> memberList) {
-        this.memberList = memberList;
-    }
-
-    public Boolean getMaster() {
-        return master;
-    }
-
-    public void setMaster(Boolean master) {
-        this.master = master;
-    }
-
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
-    }
-
-    public void setTime(long time) {
-        this.time = time;
-    }
-
-    public long getTime() {
-        return time;
-    }
-
-    public Set<String> getInstanceNames() {
-        return instanceNames;
-    }
-
-
-    public void setInstanceNames(Set<String> longInstanceNames) {
-        this.instanceNames = longInstanceNames;
-    }
-
-    public MemberStateImpl getMemberState() {
-        return memberState;
-    }
-
-    public void setMemberState(MemberStateImpl memberState) {
-        this.memberState = memberState;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        TimedMemberState that = (TimedMemberState) o;
-
-        if (time != that.time) {
-            return false;
-        }
-        if (clusterName != null ? !clusterName.equals(that.clusterName) : that.clusterName != null) {
-            return false;
-        }
-        if (instanceNames != null ? !instanceNames.equals(that.instanceNames) : that.instanceNames != null) {
-            return false;
-        }
-        if (master != null ? !master.equals(that.master) : that.master != null) {
-            return false;
-        }
-        if (memberList != null ? !memberList.equals(that.memberList) : that.memberList != null) {
-            return false;
-        }
-        if (memberState != null ? !memberState.equals(that.memberState) : that.memberState != null) {
-            return false;
-        }
-
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = (int) (time ^ (time >>> 32));
-        result = 31 * result + (memberState != null ? memberState.hashCode() : 0);
-        result = 31 * result + (instanceNames != null ? instanceNames.hashCode() : 0);
-        result = 31 * result + (memberList != null ? memberList.hashCode() : 0);
-        result = 31 * result + (master != null ? master.hashCode() : 0);
-        result = 31 * result + (clusterName != null ? clusterName.hashCode() : 0);
-        return result;
-    }
-
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("TimedMemberState{\n");
-        sb.append("\t");
-        sb.append(memberState);
-        sb.append("\n");
-        sb.append("}\n");
-        sb.append("Instances : ");
-        sb.append(instanceNames);
-        return sb.toString();
+        return "TimedMemberState{"
+                + getLineSeperator() + '\t' + memberState
+                + getLineSeperator() + "} Instances: " + instanceNames;
     }
 }

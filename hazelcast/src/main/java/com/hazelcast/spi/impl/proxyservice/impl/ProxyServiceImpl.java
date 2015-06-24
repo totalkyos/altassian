@@ -28,7 +28,6 @@ import com.hazelcast.spi.PostJoinAwareService;
 import com.hazelcast.spi.ProxyService;
 import com.hazelcast.spi.RemoteService;
 import com.hazelcast.spi.exception.DistributedObjectDestroyedException;
-import com.hazelcast.spi.impl.DistributedObjectEventPacket;
 import com.hazelcast.spi.impl.NodeEngineImpl;
 import com.hazelcast.spi.impl.proxyservice.InternalProxyService;
 import com.hazelcast.spi.impl.proxyservice.impl.operations.DistributedObjectDestroyOperation;
@@ -58,10 +57,10 @@ public class ProxyServiceImpl
 
     public static final String SERVICE_NAME = "hz:core:proxyService";
 
-    private static final FutureUtil.ExceptionHandler DESTROY_PROXY_EXCEPTION_HANDLER = FutureUtil.logAllExceptions(Level.FINEST);
+    private static final FutureUtil.ExceptionHandler DESTROY_PROXY_EXCEPTION_HANDLER = FutureUtil.logAllExceptions(Level.WARNING);
 
     private static final int TRY_COUNT = 10;
-    private static final long TIME = 3;
+    private static final long DESTROY_TIMEOUT_SECONDS = 30;
 
     final NodeEngineImpl nodeEngine;
     final ILogger logger;
@@ -140,7 +139,7 @@ public class ProxyServiceImpl
 
         destroyLocalDistributedObject(serviceName, name, true);
 
-        waitWithDeadline(calls, TIME, TimeUnit.SECONDS, DESTROY_PROXY_EXCEPTION_HANDLER);
+        waitWithDeadline(calls, DESTROY_TIMEOUT_SECONDS, TimeUnit.SECONDS, DESTROY_PROXY_EXCEPTION_HANDLER);
     }
 
     public void destroyLocalDistributedObject(String serviceName, String name, boolean fireEvent) {

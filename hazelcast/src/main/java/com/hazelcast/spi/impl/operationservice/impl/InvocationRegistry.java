@@ -31,6 +31,7 @@ import com.hazelcast.spi.impl.operationservice.impl.responses.CallTimeoutRespons
 import com.hazelcast.spi.impl.operationservice.impl.responses.ErrorResponse;
 import com.hazelcast.spi.impl.operationservice.impl.responses.NormalResponse;
 import com.hazelcast.spi.impl.operationservice.impl.responses.Response;
+import com.hazelcast.util.Clock;
 import com.hazelcast.util.EmptyStatement;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,23 +65,32 @@ public class InvocationRegistry {
 
     private final long backupTimeoutMillis;
     private final ConcurrentMap<Long, Invocation> invocations;
-    private final OperationServiceImpl operationService;
     private final NodeEngineImpl nodeEngine;
     private final ILogger logger;
     private final InspectionThread inspectionThread;
     private final CallIdSequence callIdSequence;
+    private final long slowInvocationThresholdMs;
 
-    public InvocationRegistry(OperationServiceImpl operationService, int concurrencyLevel) {
-        this.operationService = operationService;
-        this.nodeEngine = operationService.nodeEngine;
-        this.logger = operationService.logger;
-        this.callIdSequence = operationService.backpressureRegulator.newCallIdSequence();
+    public InvocationRegistry(NodeEngineImpl nodeEngine, ILogger logger, BackpressureRegulator backpressureRegulator,
+                              int concurrencyLevel) {
+        this.nodeEngine = nodeEngine;
+        this.logger = logger;
+        this.callIdSequence = backpressureRegulator.newCallIdSequence();
 
-        GroupProperties props = operationService.nodeEngine.getGroupProperties();
+        GroupProperties props = nodeEngine.getGroupProperties();
+        this.slowInvocationThresholdMs = initSlowInvocationThresholdMs(props);
         this.backupTimeoutMillis = props.OPERATION_BACKUP_TIMEOUT_MILLIS.getLong();
         this.invocations = new ConcurrentHashMap<Long, Invocation>(INITIAL_CAPACITY, LOAD_FACTOR, concurrencyLevel);
         this.inspectionThread = new InspectionThread();
         inspectionThread.start();
+    }
+
+    private long initSlowInvocationThresholdMs(GroupProperties props) {
+        long thresholdMs = props.SLOW_INVOCATION_DETECTOR_THRESHOLD_MILLIS.getLong();
+        if (thresholdMs > -1) {
+            logger.info("Slow invocation detector enabled, using threshold: " + thresholdMs + " ms");
+        }
+        return thresholdMs;
     }
 
     public long getLastCallId() {
@@ -274,7 +284,7 @@ public class InvocationRegistry {
         private volatile boolean shutdown;
 
         InspectionThread() {
-            super(operationService.node.getHazelcastThreadGroup().getThreadNamePrefix("InspectInvocationsThread"));
+            super(nodeEngine.getNode().getHazelcastThreadGroup().getThreadNamePrefix("InspectInvocationsThread"));
         }
 
         public void shutdown() {
@@ -293,7 +303,7 @@ public class InvocationRegistry {
                 }
             } catch (Throwable t) {
                 inspectOutputMemoryError(t);
-                operationService.logger.severe("Failed to run", t);
+                logger.severe("Failed to run", t);
             }
         }
 
@@ -311,6 +321,8 @@ public class InvocationRegistry {
                 return;
             }
 
+            long now = Clock.currentTimeMillis();
+
             // todo: these 2 measurements should be added to the black-box.
             int backupTimeouts = 0;
             int invocationTimeouts = 0;
@@ -319,26 +331,48 @@ public class InvocationRegistry {
                     return;
                 }
 
-                try {
-                    if (invocation.checkInvocationTimeout()) {
-                        invocationTimeouts++;
-                    }
-                } catch (Throwable t) {
-                    inspectOutputMemoryError(t);
-                    logger.severe("Failed to handle operation timeout of invocation:" + invocation, t);
+                detectSlowInvocation(now, invocation);
+
+                if (checkInvocationTimeout(invocation)) {
+                    invocationTimeouts++;
                 }
 
-                try {
-                    if (invocation.checkBackupTimeout(backupTimeoutMillis)) {
-                        backupTimeouts++;
-                    }
-                } catch (Throwable t) {
-                    inspectOutputMemoryError(t);
-                    logger.severe("Failed to handle backup timeout of invocation:" + invocation, t);
+                if (checkBackupTimeout(invocation)) {
+                    backupTimeouts++;
                 }
             }
 
             log(backupTimeouts, invocationTimeouts);
+        }
+
+        private void detectSlowInvocation(long now, Invocation invocation) {
+            if (slowInvocationThresholdMs > 0) {
+                long durationMs = now - invocation.op.getInvocationTime();
+                if (durationMs > slowInvocationThresholdMs) {
+                    logger.info("Slow invocation: duration=" + durationMs + " ms, operation="
+                            + invocation.op.getClass().getName() + " inv:" + invocation);
+                }
+            }
+        }
+
+        private boolean checkInvocationTimeout(Invocation invocation) {
+            try {
+                return invocation.checkInvocationTimeout();
+            } catch (Throwable t) {
+                inspectOutputMemoryError(t);
+                logger.severe("Failed to handle operation timeout of invocation:" + invocation, t);
+                return false;
+            }
+        }
+
+        private boolean checkBackupTimeout(Invocation invocation) {
+            try {
+                return invocation.checkBackupTimeout(backupTimeoutMillis);
+            } catch (Throwable t) {
+                inspectOutputMemoryError(t);
+                logger.severe("Failed to handle backup timeout of invocation:" + invocation, t);
+                return false;
+            }
         }
 
         private void log(int backupTimeouts, int invocationTimeouts) {
