@@ -55,8 +55,8 @@ class ExecutionCallbackAdapterFactory {
     private void onResponse(Member member, Object response) {
         assertNotDone();
         assertIsMember(member);
-        placeResponse(member, response);
         triggerOnResponse(member, response);
+        placeResponse(member, response);
         triggerOnComplete();
     }
 
