@@ -10,14 +10,12 @@ import com.hazelcast.core.IMap;
 import com.hazelcast.core.LifecycleEvent;
 import com.hazelcast.core.LifecycleListener;
 import com.hazelcast.instance.GroupProperties;
-import com.hazelcast.instance.Node;
-import com.hazelcast.instance.TestUtil;
 import com.hazelcast.test.AssertTask;
-import com.hazelcast.test.HazelcastSerialClassRunner;
+import com.hazelcast.test.HazelcastParallelClassRunner;
 import com.hazelcast.test.HazelcastTestSupport;
 import com.hazelcast.test.annotation.NightlyTest;
+import com.hazelcast.util.EmptyStatement;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -29,11 +27,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-@RunWith(HazelcastSerialClassRunner.class)
+@RunWith(HazelcastParallelClassRunner.class)
 @Category(NightlyTest.class)
 public class ClientSplitBrainTest extends HazelcastTestSupport {
 
-    @Before
     @After
     public void cleanup() {
         HazelcastClient.shutdownAll();
@@ -81,13 +78,15 @@ public class ClientSplitBrainTest extends HazelcastTestSupport {
         assertEquals(2, h1.getCluster().getMembers().size());
         assertEquals(2, h2.getCluster().getMembers().size());
 
-        final Thread clientThread = startClientPutThread(mapClient);
+        AtomicBoolean testFinished = new AtomicBoolean(false);
+        final Thread clientThread = startClientPutThread(mapClient, testFinished);
 
         try {
             checkEventsEventually(listenerGotEventFlags);
         } catch (Throwable t) {
             throw t;
         } finally {
+            testFinished.set(true);
             clientThread.interrupt();
             clientThread.join();
         }
@@ -106,12 +105,16 @@ public class ClientSplitBrainTest extends HazelcastTestSupport {
         }
     }
 
-    private Thread startClientPutThread(final IMap<Object, Object> mapClient) {
+    private Thread startClientPutThread(final IMap<Object, Object> mapClient, final AtomicBoolean testFinished) {
         final Thread clientThread = new Thread() {
             @Override
             public void run() {
-                while (!Thread.interrupted()) {
-                    mapClient.put(1, 1);
+                while (!testFinished.get()) {
+                    try {
+                        mapClient.put(1, 1);
+                    } catch (Throwable t) {
+                        EmptyStatement.ignore(t);
+                    }
                 }
             }
         };

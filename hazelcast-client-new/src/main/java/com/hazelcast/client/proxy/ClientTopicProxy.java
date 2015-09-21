@@ -16,6 +16,7 @@
 
 package com.hazelcast.client.proxy;
 
+import com.hazelcast.client.impl.ClientMessageDecoder;
 import com.hazelcast.client.impl.protocol.ClientMessage;
 import com.hazelcast.client.impl.protocol.codec.TopicAddMessageListenerCodec;
 import com.hazelcast.client.impl.protocol.codec.TopicPublishCodec;
@@ -23,6 +24,7 @@ import com.hazelcast.client.impl.protocol.codec.TopicRemoveMessageListenerCodec;
 import com.hazelcast.client.spi.ClientClusterService;
 import com.hazelcast.client.spi.ClientProxy;
 import com.hazelcast.client.spi.EventHandler;
+import com.hazelcast.client.spi.impl.ListenerRemoveCodec;
 import com.hazelcast.core.ITopic;
 import com.hazelcast.core.Member;
 import com.hazelcast.core.Message;
@@ -54,13 +56,28 @@ public class ClientTopicProxy<E> extends ClientProxy implements ITopic<E> {
         ClientMessage request = TopicAddMessageListenerCodec.encodeRequest(name);
 
         EventHandler<ClientMessage> handler = new TopicItemHandler(listener);
-        return listen(request, getKey(), handler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) TopicAddMessageListenerCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, getKey(), handler, responseDecoder);
     }
 
     @Override
     public boolean removeMessageListener(String registrationId) {
-        ClientMessage request = TopicRemoveMessageListenerCodec.encodeRequest(name, registrationId);
-        return stopListening(request, registrationId);
+        return stopListening(registrationId, new ListenerRemoveCodec() {
+            @Override
+            public ClientMessage encodeRequest(String realRegistrationId) {
+                return TopicRemoveMessageListenerCodec.encodeRequest(name, realRegistrationId);
+            }
+
+            @Override
+            public boolean decodeResponse(ClientMessage clientMessage) {
+                return TopicRemoveMessageListenerCodec.decodeResponse(clientMessage).response;
+            }
+        });
     }
 
     @Override

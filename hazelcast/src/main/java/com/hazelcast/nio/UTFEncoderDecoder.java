@@ -274,7 +274,10 @@ public final class UTFEncoderDecoder {
             long offset = -1;
             if (UnsafeHelper.UNSAFE_AVAILABLE) {
                 try {
-                    offset = UNSAFE.objectFieldOffset(String.class.getDeclaredField("value"));
+                    Field valueField = String.class.getDeclaredField("value");
+                    if (char[].class.equals(valueField.getType())) {
+                        offset = UNSAFE.objectFieldOffset(valueField);
+                    }
                 } catch (Throwable t) {
                     EmptyStatement.ignore(t);
                 }
@@ -309,7 +312,11 @@ public final class UTFEncoderDecoder {
             Field field;
             try {
                 field = String.class.getDeclaredField("value");
-                field.setAccessible(true);
+                if (char[].class.equals(field.getType())) {
+                    field.setAccessible(true);
+                } else {
+                    field = null;
+                }
             } catch (Throwable t) {
                 EmptyStatement.ignore(t);
                 field = null;
@@ -709,7 +716,16 @@ public final class UTFEncoderDecoder {
     }
 
     static StringCreator createStringCreator(boolean fastStringEnabled) {
-        return fastStringEnabled ? buildFastStringCreator() : new DefaultStringCreator();
+        StringCreator stringCreator =
+                fastStringEnabled
+                        ? buildFastStringCreator()
+                        : new DefaultStringCreator();
+        if (stringCreator == null) {
+            // Fast string creation may return null due to issues about reflection.
+            // In this case, use default string creator.
+            stringCreator = new DefaultStringCreator();
+        }
+        return stringCreator;
     }
 
     static UtfWriter createUtfWriter() {

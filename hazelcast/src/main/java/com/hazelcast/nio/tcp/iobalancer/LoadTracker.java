@@ -86,6 +86,11 @@ class LoadTracker {
         return imbalance;
     }
 
+    // just for testing
+    Set<MigratableHandler> getHandlers() {
+        return handlers;
+    }
+
     private void updateNewFinalImbalance() {
         imbalance.minimumEvents = Long.MAX_VALUE;
         imbalance.maximumEvents = Long.MIN_VALUE;
@@ -93,10 +98,16 @@ class LoadTracker {
         imbalance.destinationSelector = null;
         for (AbstractIOSelector selector : selectors) {
             long eventCount = selectorEvents.get(selector);
-            if (eventCount > imbalance.maximumEvents) {
+            int handlerCount = selectorToHandlers.get(selector).size();
+
+            if (eventCount > imbalance.maximumEvents && handlerCount > 1) {
+                // if a selector has only 1 handle, there is no point in making it a source selector since
+                // there is no handler that can be migrated anyway. In that case it is better to move on to
+                // the next selector.
                 imbalance.maximumEvents = eventCount;
                 imbalance.sourceSelector = selector;
             }
+
             if (eventCount < imbalance.minimumEvents) {
                 imbalance.minimumEvents = eventCount;
                 imbalance.destinationSelector = selector;

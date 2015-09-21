@@ -46,6 +46,7 @@ import com.hazelcast.client.spi.ClientContext;
 import com.hazelcast.client.spi.ClientExecutionService;
 import com.hazelcast.client.spi.EventHandler;
 import com.hazelcast.client.spi.impl.ClientInvocation;
+import com.hazelcast.client.spi.impl.ClientInvocationFuture;
 import com.hazelcast.config.CacheConfig;
 import com.hazelcast.config.InMemoryFormat;
 import com.hazelcast.config.NearCacheConfig;
@@ -136,10 +137,10 @@ abstract class AbstractClientInternalCacheProxy<K, V>
         if (nearCacheConfig != null) {
             cacheOnUpdate = nearCacheConfig.getLocalUpdatePolicy() == NearCacheConfig.LocalUpdatePolicy.CACHE;
             NearCacheContext nearCacheContext =
-                    new NearCacheContext(clientContext.getSerializationService(),
+                    new NearCacheContext(nearCacheManager,
+                            clientContext.getSerializationService(),
                             createNearCacheExecutor(clientContext.getExecutionService()));
-            nearCache = nearCacheManager
-                    .getOrCreateNearCache(nameWithPrefix, nearCacheConfig, nearCacheContext);
+            nearCache = nearCacheManager.getOrCreateNearCache(nameWithPrefix, nearCacheConfig, nearCacheContext);
             registerInvalidationListener();
         }
     }
@@ -194,7 +195,8 @@ abstract class AbstractClientInternalCacheProxy<K, V>
             int partitionId = clientContext.getPartitionService().getPartitionId(keyData);
             HazelcastClientInstanceImpl client = (HazelcastClientInstanceImpl) clientContext.getHazelcastInstance();
             final ClientInvocation clientInvocation = new ClientInvocation(client, req, partitionId);
-            final ICompletableFuture<T> f = clientInvocation.invoke();
+            final ClientInvocationFuture<T> f = clientInvocation.invoke();
+            f.setResponseDeserialized(true);
             if (completionOperation) {
                 waitCompletionLatch(completionId, f);
             }
@@ -381,7 +383,7 @@ abstract class AbstractClientInternalCacheProxy<K, V>
     }
 
     protected void storeInNearCache(Data key, Data valueData, V value) {
-        if (nearCache != null) {
+        if (nearCache != null && valueData != null) {
             Object valueToStore = nearCache.selectToSave(value, valueData);
             nearCache.put(key, valueToStore);
         }
@@ -411,6 +413,16 @@ abstract class AbstractClientInternalCacheProxy<K, V>
             regs = asyncListenerRegistrations;
         }
         return regs.remove(cacheEntryListenerConfiguration);
+    }
+
+    protected String getListenerIdLocal(CacheEntryListenerConfiguration<K, V> cacheEntryListenerConfiguration) {
+        final ConcurrentMap<CacheEntryListenerConfiguration, String> regs;
+        if (cacheEntryListenerConfiguration.isSynchronous()) {
+            regs = syncListenerRegistrations;
+        } else {
+            regs = asyncListenerRegistrations;
+        }
+        return regs.get(cacheEntryListenerConfiguration);
     }
 
     private void deregisterAllCacheEntryListener(Collection<String> listenerRegistrations) {

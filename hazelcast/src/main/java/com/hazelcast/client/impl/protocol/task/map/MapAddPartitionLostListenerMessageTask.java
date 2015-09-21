@@ -56,7 +56,7 @@ public class MapAddPartitionLostListenerMessageTask
         };
 
         String registrationId = mapService.getMapServiceContext().addPartitionLostListener(listener, parameters.name);
-        endpoint.setListenerRegistration(MapService.SERVICE_NAME, parameters.name, registrationId);
+        endpoint.addListenerDestroyAction(MapService.SERVICE_NAME, parameters.name, registrationId);
         return registrationId;
     }
 
@@ -83,7 +83,7 @@ public class MapAddPartitionLostListenerMessageTask
 
     @Override
     public Object[] getParameters() {
-        return null;
+        return new Object[]{null};
     }
 
     @Override

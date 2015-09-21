@@ -295,7 +295,8 @@ public class CacheProxy<K, V>
         final ICacheService service = getService();
         final CacheEventListenerAdaptor<K, V> entryListener = new CacheEventListenerAdaptor<K, V>(this,
                 cacheEntryListenerConfiguration, getNodeEngine().getSerializationService());
-        final String regId = service.registerListener(getDistributedObjectName(), entryListener);
+        final String regId =
+                service.registerListener(getDistributedObjectName(), entryListener, entryListener);
         if (regId != null) {
             cacheConfig.addCacheEntryListenerConfiguration(cacheEntryListenerConfiguration);
             addListenerLocally(regId, cacheEntryListenerConfiguration);
@@ -309,11 +310,10 @@ public class CacheProxy<K, V>
         checkNotNull(cacheEntryListenerConfiguration, "CacheEntryListenerConfiguration can't be null");
 
         final ICacheService service = getService();
-        final String regId = removeListenerLocally(cacheEntryListenerConfiguration);
+        final String regId = getListenerIdLocal(cacheEntryListenerConfiguration);
         if (regId != null) {
-            if (!service.deregisterListener(getDistributedObjectName(), regId)) {
-                addListenerLocally(regId, cacheEntryListenerConfiguration);
-            } else {
+            if (service.deregisterListener(getDistributedObjectName(), regId)) {
+                removeListenerLocally(cacheEntryListenerConfiguration);
                 cacheConfig.removeCacheEntryListenerConfiguration(cacheEntryListenerConfiguration);
                 //REMOVE ON OTHERS TOO
                 updateCacheListenerConfigOnOtherNodes(cacheEntryListenerConfiguration, false);

@@ -94,6 +94,7 @@ public class HazelcastHttpSession implements HttpSession {
         entry.setValue(value);
         entry.setDirty(true);
         entry.setRemoved(false);
+        entry.setReload(false);
         if (!deferredWrite && !transientEntry) {
             try {
                 webFilter.getClusteredSessionService().setAttribute(id, name, value);
@@ -111,10 +112,9 @@ public class HazelcastHttpSession implements HttpSession {
         if (cacheEntry == null || cacheEntry.isReload()) {
             try {
                 value = webFilter.getClusteredSessionService().getAttribute(id, name);
-                if (value == null) {
-                    return null;
-                }
                 cacheEntry = new LocalCacheEntry(false, value);
+                cacheEntry.setReload(false);
+                localCache.put(name, cacheEntry);
             } catch (Exception e) {
                 WebFilter.LOGGER.warning("session could not be load so you might be dealing with stale data", e);
                 if (cacheEntry == null) {
@@ -191,6 +191,7 @@ public class HazelcastHttpSession implements HttpSession {
             entry.setValue(null);
             entry.setRemoved(true);
             entry.setDirty(true);
+            entry.setReload(false);
         }
         if (!deferredWrite) {
             try {

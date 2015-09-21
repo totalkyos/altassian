@@ -16,6 +16,7 @@
 
 package com.hazelcast.client.impl.protocol.task.cache;
 
+import com.hazelcast.cache.impl.CacheContext;
 import com.hazelcast.cache.impl.CacheEventListener;
 import com.hazelcast.cache.impl.CacheService;
 import com.hazelcast.cache.impl.client.CacheBatchInvalidationMessage;
@@ -28,6 +29,8 @@ import com.hazelcast.client.impl.protocol.task.AbstractCallableMessageTask;
 import com.hazelcast.instance.Node;
 import com.hazelcast.nio.Connection;
 import com.hazelcast.nio.serialization.Data;
+import com.hazelcast.spi.EventRegistration;
+import com.hazelcast.spi.NotifiableEventListener;
 
 import java.security.Permission;
 import java.util.ArrayList;
@@ -44,36 +47,78 @@ public class CacheAddInvalidationListenerTask
     protected Object call() {
         final ClientEndpoint endpoint = getEndpoint();
         CacheService cacheService = getService(CacheService.SERVICE_NAME);
-        String registrationId = cacheService.addInvalidationListener(parameters.name, new CacheEventListener() {
-            @Override
-            public void handleEvent(Object eventObject) {
-                if (!endpoint.isAlive()) {
-                    return;
-                }
-                if (eventObject instanceof CacheInvalidationMessage) {
-                    if (eventObject instanceof CacheSingleInvalidationMessage) {
-                        CacheSingleInvalidationMessage message = (CacheSingleInvalidationMessage) eventObject;
-                        ClientMessage eventMessage = CacheAddInvalidationListenerCodec.
-                                    encodeCacheInvalidationEvent(message.getName(), message.getKey(), message.getSourceUuid());
-                        sendClientMessage(message.getName(), eventMessage);
-                    } else if (eventObject instanceof CacheBatchInvalidationMessage) {
-                        CacheBatchInvalidationMessage message = (CacheBatchInvalidationMessage) eventObject;
-                        List<CacheSingleInvalidationMessage> invalidationMessages = message.getInvalidationMessages();
-                        List<Data> keys = new ArrayList<Data>(invalidationMessages.size());
-                        List<String> sourceUuids = new ArrayList<String>(invalidationMessages.size());
-                        for (CacheSingleInvalidationMessage invalidationMessage : invalidationMessages) {
-                            keys.add(invalidationMessage.getKey());
-                            sourceUuids.add(invalidationMessage.getSourceUuid());
-                        }
-                        ClientMessage eventMessage = CacheAddInvalidationListenerCodec.
-                                    encodeCacheBatchInvalidationEvent(message.getName(), keys, sourceUuids);
+        CacheContext cacheContext = cacheService.getOrCreateCacheContext(parameters.name);
+        String registrationId =
+                cacheService.addInvalidationListener(parameters.name,
+                                                     new CacheInvalidationEventListener(endpoint, cacheContext));
+        endpoint.addListenerDestroyAction(CacheService.SERVICE_NAME, parameters.name, registrationId);
+        return registrationId;
+    }
+
+    private final class CacheInvalidationEventListener
+            implements CacheEventListener, NotifiableEventListener<CacheService> {
+
+        private final ClientEndpoint endpoint;
+        private final CacheContext cacheContext;
+
+        private CacheInvalidationEventListener(ClientEndpoint endpoint, CacheContext cacheContext) {
+            this.endpoint = endpoint;
+            this.cacheContext = cacheContext;
+        }
+
+        @Override
+        public void handleEvent(Object eventObject) {
+            if (!endpoint.isAlive()) {
+                return;
+            }
+            if (eventObject instanceof CacheInvalidationMessage) {
+                String targetUuid = endpoint.getUuid();
+                if (eventObject instanceof CacheSingleInvalidationMessage) {
+                    CacheSingleInvalidationMessage message = (CacheSingleInvalidationMessage) eventObject;
+                    if (!targetUuid.equals(message.getSourceUuid())) {
+                        // Since we already filtered as source uuid, no need to send source uuid to client
+                        // TODO Maybe don't send name also to client
+                        ClientMessage eventMessage =
+                                CacheAddInvalidationListenerCodec
+                                        .encodeCacheInvalidationEvent(message.getName(),
+                                                                      message.getKey(),
+                                                                      null);
                         sendClientMessage(message.getName(), eventMessage);
                     }
+                } else if (eventObject instanceof CacheBatchInvalidationMessage) {
+                    CacheBatchInvalidationMessage message = (CacheBatchInvalidationMessage) eventObject;
+                    List<CacheSingleInvalidationMessage> invalidationMessages =
+                            message.getInvalidationMessages();
+                    List<Data> filteredKeys = new ArrayList<Data>(invalidationMessages.size());
+                    for (CacheSingleInvalidationMessage invalidationMessage : invalidationMessages) {
+                        if (!targetUuid.equals(invalidationMessage.getSourceUuid())) {
+                            filteredKeys.add(invalidationMessage.getKey());
+                        }
+                    }
+                    // Since we already filtered keys as source uuid, no need to send source uuid list to client
+                    // TODO Maybe don't send name also to client
+                    ClientMessage eventMessage =
+                            CacheAddInvalidationListenerCodec
+                                .encodeCacheBatchInvalidationEvent(message.getName(),
+                                                                   filteredKeys,
+                                                                   null);
+                    sendClientMessage(message.getName(), eventMessage);
                 }
             }
-        });
-        endpoint.setListenerRegistration(CacheService.SERVICE_NAME, parameters.name, registrationId);
-        return registrationId;
+        }
+
+        @Override
+        public void onRegister(CacheService cacheService, String serviceName,
+                               String topic, EventRegistration registration) {
+            cacheContext.increaseInvalidationListenerCount();
+        }
+
+        @Override
+        public void onDeregister(CacheService cacheService, String serviceName,
+                                 String topic, EventRegistration registration) {
+            cacheContext.decreaseInvalidationListenerCount();
+        }
+
     }
 
     @Override

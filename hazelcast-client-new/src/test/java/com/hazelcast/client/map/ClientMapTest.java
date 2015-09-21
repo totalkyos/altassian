@@ -16,35 +16,34 @@
 
 package com.hazelcast.client.map;
 
-import com.hazelcast.client.HazelcastClient;
-import com.hazelcast.client.config.ClientConfig;
+import com.hazelcast.client.impl.client.AuthenticationRequest;
+import com.hazelcast.client.map.helpers.GenericEvent;
+import com.hazelcast.client.test.TestHazelcastFactory;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MapStoreConfig;
 import com.hazelcast.core.EntryAdapter;
 import com.hazelcast.core.EntryEvent;
 import com.hazelcast.core.EntryListener;
 import com.hazelcast.core.ExecutionCallback;
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 import com.hazelcast.core.MapEvent;
 import com.hazelcast.core.MapStoreAdapter;
+import com.hazelcast.core.MultiMap;
 import com.hazelcast.core.PartitionAware;
 import com.hazelcast.map.AbstractEntryProcessor;
 import com.hazelcast.monitor.LocalMapStats;
 import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
 import com.hazelcast.nio.serialization.DataSerializable;
-import com.hazelcast.nio.serialization.NamedPortable;
-import com.hazelcast.nio.serialization.Portable;
-import com.hazelcast.nio.serialization.PortableFactory;
-import com.hazelcast.nio.serialization.TestSerializationConstants;
 import com.hazelcast.query.Predicate;
 import com.hazelcast.query.SqlPredicate;
+import com.hazelcast.security.UsernamePasswordCredentials;
+import com.hazelcast.test.AssertTask;
 import com.hazelcast.test.HazelcastParallelClassRunner;
 import com.hazelcast.test.annotation.QuickTest;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -62,6 +61,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.hazelcast.test.HazelcastTestSupport.assertOpenEventually;
+import static com.hazelcast.test.HazelcastTestSupport.assertTrueEventually;
 import static com.hazelcast.test.HazelcastTestSupport.randomString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -73,14 +73,21 @@ import static org.junit.Assert.assertTrue;
 @Category(QuickTest.class)
 public class ClientMapTest {
 
-    static HazelcastInstance client;
-    static HazelcastInstance server;
+    private final TestHazelcastFactory hazelcastFactory = new TestHazelcastFactory();
 
-    static TestMapStore flushMapStore = new TestMapStore();
-    static TestMapStore transientMapStore = new TestMapStore();
+    @After
+    public void tearDown() {
+        hazelcastFactory.terminateAll();
+    }
 
-    @BeforeClass
-    public static void init() {
+    private HazelcastInstance client;
+    private HazelcastInstance server;
+
+    private TestMapStore flushMapStore = new TestMapStore();
+    private TestMapStore transientMapStore = new TestMapStore();
+
+    @Before
+    public void setup() {
         Config config = new Config();
         config.getMapConfig("flushMap").
                 setMapStoreConfig(new MapStoreConfig()
@@ -91,34 +98,13 @@ public class ClientMapTest {
                         .setWriteDelaySeconds(1000)
                         .setImplementation(transientMapStore));
 
-        PortableFactory portableFactory = new PortableFactory() {
-            @Override
-            public Portable create(int classId) {
-                if (classId == TestSerializationConstants.NAMED_PORTABLE) {
-                    return new NamedPortable();
-                }
-                return null;
-            }
-        };
-        config.getSerializationConfig().addPortableFactory(TestSerializationConstants.PORTABLE_FACTORY_ID,
-                portableFactory);
-        server = Hazelcast.newHazelcastInstance(config);
-
-        ClientConfig clientConfig = new ClientConfig();
-        clientConfig.getSerializationConfig().addPortableFactory(TestSerializationConstants.PORTABLE_FACTORY_ID,
-                portableFactory);
-        client = HazelcastClient.newHazelcastClient(clientConfig);
+        server = hazelcastFactory.newHazelcastInstance(config);
+        client = hazelcastFactory.newHazelcastClient(null);
     }
 
 
     public IMap createMap() {
         return client.getMap(randomString());
-    }
-
-    @AfterClass
-    public static void destroy() {
-        client.shutdown();
-        Hazelcast.shutdownAll();
     }
 
     @Test
@@ -327,8 +313,12 @@ public class ClientMapTest {
         final IMap map = createMap();
         map.put("key1", "value1", 1, TimeUnit.SECONDS);
         assertNotNull(map.get("key1"));
-        Thread.sleep(2000);
-        assertNull(map.get("key1"));
+        assertTrueEventually(new AssertTask() {
+            @Override
+            public void run() throws Exception {
+                assertNull(map.get("key1"));
+            }
+        });
     }
 
     @Test
@@ -343,7 +333,12 @@ public class ClientMapTest {
         final IMap map = createMap();
         assertNull(map.putIfAbsent("key1", "value1", 1, TimeUnit.SECONDS));
         assertEquals("value1", map.putIfAbsent("key1", "value3", 1, TimeUnit.SECONDS));
-        Thread.sleep(6000);
+        assertTrueEventually(new AssertTask() {
+            @Override
+            public void run() throws Exception {
+                assertNull(map.get("key1"));
+            }
+        });
         assertNull(map.putIfAbsent("key1", "value3", 1, TimeUnit.SECONDS));
         assertEquals("value3", map.putIfAbsent("key1", "value4", 1, TimeUnit.SECONDS));
     }
@@ -360,8 +355,12 @@ public class ClientMapTest {
         map.set("key1", "value3", 1, TimeUnit.SECONDS);
         assertEquals("value3", map.get("key1"));
 
-        Thread.sleep(2000);
-        assertNull(map.get("key1"));
+        assertTrueEventually(new AssertTask() {
+            @Override
+            public void run() throws Exception {
+                assertNull(map.get("key1"));
+            }
+        });
 
     }
 
@@ -515,6 +514,14 @@ public class ClientMapTest {
     }
 
     @Test
+    public void testExecuteOnKey() throws Exception {
+        final IMap map = createMap();
+        map.put(1, 1);
+        Object result = map.executeOnKey(1, new IncrementorEntryProcessor());
+        assertEquals(2, result);
+    }
+
+    @Test
     public void testSubmitToKey() throws Exception {
         final IMap map = createMap();
         map.put(1, 1);
@@ -536,9 +543,11 @@ public class ClientMapTest {
         final IMap map = createMap();
         map.put(1, 1);
         final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicInteger result = new AtomicInteger();
         ExecutionCallback executionCallback = new ExecutionCallback() {
             @Override
             public void onResponse(Object response) {
+                result.set((Integer) response);
                 latch.countDown();
             }
 
@@ -549,6 +558,7 @@ public class ClientMapTest {
 
         map.submitToKey(1, new IncrementorEntryProcessor(), executionCallback);
         assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertEquals(2, result.get());
         assertEquals(2, map.get(1));
     }
 
@@ -613,35 +623,15 @@ public class ClientMapTest {
                 countDownLatch.countDown();
             }
         };
-        NamedPortable key = new NamedPortable("named", 1);
+        AuthenticationRequest key = new AuthenticationRequest(new UsernamePasswordCredentials("a", "b"));
         tradeMap.addEntryListener(listener, key, true);
-        NamedPortable key2 = new NamedPortable("named", 2);
-
+        AuthenticationRequest key2 = new AuthenticationRequest(new UsernamePasswordCredentials("a", "c"));
         tradeMap.put(key2, 1);
-        tradeMap.put(key, 1);
 
-        assertOpenEventually(countDownLatch);
-        assertEquals(1, atomicInteger.get());
+
+        assertFalse(countDownLatch.await(5, TimeUnit.SECONDS));
+        assertEquals(0, atomicInteger.get());
     }
-
-    @Test
-    public void testExecuteOnEntriesWithPredicate() {
-        final IMap map = createMap();
-        IncrementorEntryProcessor entryProcessor = new IncrementorEntryProcessor();
-        map.put(1, 2);
-        map.executeOnEntries(entryProcessor);
-        assertEquals(map.get(1), 3);
-    }
-
-    @Test
-    public void testExecuteOnKeyWithPredicate() {
-        final IMap map = createMap();
-        IncrementorEntryProcessor entryProcessor = new IncrementorEntryProcessor();
-        map.put(1, 2);
-        map.executeOnKey(1, entryProcessor);
-        assertEquals(map.get(1), 3);
-    }
-
 
     @Test
     public void testBasicPredicate() {
@@ -727,13 +717,13 @@ public class ClientMapTest {
     @Test
     public void testListeners_clearAllFromNode() {
         final String name = randomString();
-        final IMap mm = client.getMap(name);
+        final MultiMap mm = client.getMultiMap(name);
         final CountDownLatch gateClearAll = new CountDownLatch(1);
         final CountDownLatch gateAdd = new CountDownLatch(1);
         final EntryListener listener = new EntListener(gateAdd, null, null, null, gateClearAll, null);
         mm.addEntryListener(listener, false);
         mm.put("key", "value");
-        server.getMap(name).clear();
+        server.getMultiMap(name).clear();
         assertOpenEventually(gateAdd);
         assertOpenEventually(gateClearAll);
     }

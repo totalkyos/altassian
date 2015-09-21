@@ -17,6 +17,7 @@
 package com.hazelcast.map.impl;
 
 import com.hazelcast.core.EntryView;
+import com.hazelcast.core.ExecutionCallback;
 import com.hazelcast.map.impl.mapstore.MapDataStore;
 import com.hazelcast.map.impl.record.Record;
 import com.hazelcast.map.merge.MapMergePolicy;
@@ -195,6 +196,16 @@ public interface RecordStore {
 
     boolean unlock(Data key, String caller, long threadId);
 
+    /**
+     * unlocks ignoring owner information
+     * introduced as a workaround, will be dropped at 3.6
+     * @param key
+     * @param threadId
+     * @return
+     * @since 3.5.3
+     */
+    boolean unlockWithoutCheckingOwnership(Data key, long threadId);
+
     boolean isLocked(Data key);
 
     boolean isTransactionallyLocked(Data key);
@@ -293,4 +304,7 @@ public interface RecordStore {
 
     /** Performs initial loading from a MapLoader if it has not been done before  **/
     void maybeDoInitialLoad();
+
+    /** Register a callback for when key loading is complete **/
+    void onKeyLoad(ExecutionCallback<Boolean> callback);
 }

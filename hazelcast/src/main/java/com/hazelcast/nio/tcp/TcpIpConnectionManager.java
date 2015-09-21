@@ -54,9 +54,13 @@ public class TcpIpConnectionManager implements ConnectionManager {
 
     final int socketReceiveBufferSize;
 
+    final int socketClientReceiveBufferSize;
+
     final IOService ioService;
 
     final int socketSendBufferSize;
+
+    final int socketClientSendBufferSize;
 
     private final ConstructorFunction<Address, TcpIpConnectionMonitor> monitorConstructor
             = new ConstructorFunction<Address, TcpIpConnectionMonitor>() {
@@ -132,6 +136,8 @@ public class TcpIpConnectionManager implements ConnectionManager {
         this.logger = loggingService.getLogger(TcpIpConnectionManager.class.getName());
         this.socketReceiveBufferSize = ioService.getSocketReceiveBufferSize() * IOService.KILO_BYTE;
         this.socketSendBufferSize = ioService.getSocketSendBufferSize() * IOService.KILO_BYTE;
+        this.socketClientReceiveBufferSize = ioService.getSocketClientReceiveBufferSize() * IOService.KILO_BYTE;
+        this.socketClientSendBufferSize = ioService.getSocketClientSendBufferSize() * IOService.KILO_BYTE;
         this.socketLingerSeconds = ioService.getSocketLingerSeconds();
         this.socketConnectTimeoutSeconds = ioService.getSocketConnectTimeoutSeconds();
         this.socketKeepAlive = ioService.getSocketKeepAlive();
@@ -176,6 +182,28 @@ public class TcpIpConnectionManager implements ConnectionManager {
 
     public PacketWriter createPacketWriter(TcpIpConnection connection) {
         return ioService.createPacketWriter(connection);
+    }
+
+    // just for testing
+    public IOBalancer getIoBalancer() {
+        return ioBalancer;
+    }
+
+    // just for testing
+    public Set<TcpIpConnection> getActiveConnections() {
+        return activeConnections;
+    }
+
+    // just for testing
+    @edu.umd.cs.findbugs.annotations.SuppressWarnings({"EI_EXPOSE_REP" })
+    public InSelectorImpl[] getInSelectors() {
+        return inSelectors;
+    }
+
+    // just for testing
+    @edu.umd.cs.findbugs.annotations.SuppressWarnings({"EI_EXPOSE_REP" })
+    public OutSelectorImpl[] getOutSelectors() {
+        return outSelectors;
     }
 
     @Override
@@ -257,7 +285,6 @@ public class TcpIpConnectionManager implements ConnectionManager {
                 tcpConnection.setMonitor(connectionMonitor);
             }
         }
-        ioBalancer.connectionAdded(connection);
         connectionsMap.put(remoteEndPoint, connection);
         connectionsInProgress.remove(remoteEndPoint);
         ioService.getEventService().executeEventCallback(new StripedRunnable() {
@@ -327,6 +354,7 @@ public class TcpIpConnectionManager implements ConnectionManager {
         acceptedSockets.remove(channel);
 
         connection.start();
+        ioBalancer.connectionAdded(connection);
 
         log(Level.INFO, "Established socket connection between " + channel.socket().getLocalSocketAddress());
 
@@ -380,30 +408,35 @@ public class TcpIpConnectionManager implements ConnectionManager {
         if (logger.isFinestEnabled()) {
             log(Level.FINEST, "Destroying " + connection);
         }
-        activeConnections.remove(connection);
+        if (activeConnections.remove(connection)) {
+            ioBalancer.connectionRemoved(connection);
+        }
         final Address endPoint = connection.getEndPoint();
         if (endPoint != null) {
             connectionsInProgress.remove(endPoint);
             connectionsMap.remove(endPoint, connection);
-            ioBalancer.connectionRemoved(connection);
-            if (live) {
-                ioService.getEventService().executeEventCallback(new StripedRunnable() {
-                    @Override
-                    public void run() {
-                        for (ConnectionListener listener : connectionListeners) {
-                            listener.connectionRemoved(connection);
-                        }
-                    }
-
-                    @Override
-                    public int getKey() {
-                        return endPoint.hashCode();
-                    }
-                });
-            }
+            fireConnectionRemovedEvent(connection, endPoint);
         }
         if (connection.isAlive()) {
             connection.close();
+        }
+    }
+
+    private void fireConnectionRemovedEvent(final Connection connection, final Address endPoint) {
+        if (live) {
+            ioService.getEventService().executeEventCallback(new StripedRunnable() {
+                @Override
+                public void run() {
+                    for (ConnectionListener listener : connectionListeners) {
+                        listener.connectionRemoved(connection);
+                    }
+                }
+
+                @Override
+                public int getKey() {
+                    return endPoint.hashCode();
+                }
+            });
         }
     }
 

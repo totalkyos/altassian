@@ -16,22 +16,30 @@
 
 package com.hazelcast.cache.impl.client;
 
+import com.hazelcast.cache.impl.CacheContext;
 import com.hazelcast.cache.impl.CacheEventData;
 import com.hazelcast.cache.impl.CacheEventListener;
 import com.hazelcast.cache.impl.CacheEventSet;
 import com.hazelcast.cache.impl.CachePortableHook;
 import com.hazelcast.cache.impl.CacheService;
 import com.hazelcast.client.ClientEndpoint;
+import com.hazelcast.client.impl.ClientEndpointImpl;
 import com.hazelcast.client.impl.client.CallableClientRequest;
 import com.hazelcast.client.impl.client.RetryableRequest;
 import com.hazelcast.nio.serialization.Data;
 import com.hazelcast.nio.serialization.DefaultData;
 import com.hazelcast.nio.serialization.PortableReader;
 import com.hazelcast.nio.serialization.PortableWriter;
+import com.hazelcast.spi.EventRegistration;
+import com.hazelcast.spi.ListenerWrapperEventFilter;
+import com.hazelcast.spi.NotifiableEventListener;
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.security.Permission;
 import java.util.Set;
+import java.util.concurrent.Callable;
 
 /**
  * Client request which registers an event listener on behalf of the client and delegates the received events
@@ -54,33 +62,82 @@ public class CacheAddEntryListenerRequest
 
     @Override
     public Object call() {
-        final ClientEndpoint endpoint = getEndpoint();
+        final ClientEndpointImpl endpoint = (ClientEndpointImpl) getEndpoint();
         final CacheService service = getService();
-        CacheEventListener entryListener = new CacheEventListener() {
+        CacheEntryListener cacheEntryListener = new CacheEntryListener(getCallId(), endpoint);
+        final String registrationId = service.registerListener(name, cacheEntryListener, cacheEntryListener);
+        endpoint.addDestroyAction(registrationId, new Callable<Boolean>() {
             @Override
-            public void handleEvent(Object eventObject) {
-                if (endpoint.isAlive()) {
-                    Data partitionKey = getPartitionKey(eventObject);
-                    endpoint.sendEvent(partitionKey, eventObject, getCallId());
-                }
+            public Boolean call() throws Exception {
+                return service.deregisterListener(name, registrationId);
             }
-        };
-        return service.registerListener(name, entryListener);
+        });
+        return registrationId;
     }
 
-    private Data getPartitionKey(Object eventObject) {
-        Data partitionKey = null;
-        if (eventObject instanceof CacheEventSet) {
-            Set<CacheEventData> events = ((CacheEventSet) eventObject).getEvents();
-            if (events.size() > 1) {
-                partitionKey = new DefaultData();
-            } else if (events.size() == 1) {
-                partitionKey = events.iterator().next().getDataKey();
-            }
-        } else if (eventObject instanceof CacheEventData) {
-            partitionKey = ((CacheEventData) eventObject).getDataKey();
+    @SuppressWarnings(value = "SE_NO_SERIALVERSIONID",
+            justification = "Class is Serializable, but doesn't define serialVersionUID")
+    private static final class CacheEntryListener
+            implements CacheEventListener,
+            NotifiableEventListener<CacheService>,
+            ListenerWrapperEventFilter,
+            Serializable {
+
+        private final int callId;
+        private final transient ClientEndpoint endpoint;
+
+        private CacheEntryListener(int callId, ClientEndpoint endpoint) {
+            this.callId = callId;
+            this.endpoint = endpoint;
         }
-        return partitionKey;
+
+        private Data getPartitionKey(Object eventObject) {
+            Data partitionKey = null;
+            if (eventObject instanceof CacheEventSet) {
+                Set<CacheEventData> events = ((CacheEventSet) eventObject).getEvents();
+                if (events.size() > 1) {
+                    partitionKey = new DefaultData();
+                } else if (events.size() == 1) {
+                    partitionKey = events.iterator().next().getDataKey();
+                }
+            } else if (eventObject instanceof CacheEventData) {
+                partitionKey = ((CacheEventData) eventObject).getDataKey();
+            }
+            return partitionKey;
+        }
+
+        @Override
+        public void handleEvent(Object eventObject) {
+            if (endpoint.isAlive()) {
+                Data partitionKey = getPartitionKey(eventObject);
+                endpoint.sendEvent(partitionKey, eventObject, callId);
+            }
+        }
+
+        @Override
+        public void onRegister(CacheService service, String serviceName,
+                               String topic, EventRegistration registration) {
+            CacheContext cacheContext = service.getOrCreateCacheContext(topic);
+            cacheContext.increaseCacheEntryListenerCount();
+        }
+
+        @Override
+        public void onDeregister(CacheService service, String serviceName,
+                                 String topic, EventRegistration registration) {
+            CacheContext cacheContext = service.getOrCreateCacheContext(topic);
+            cacheContext.decreaseCacheEntryListenerCount();
+        }
+
+        @Override
+        public Object getListener() {
+            return this;
+        }
+
+        @Override
+        public boolean eval(Object event) {
+            return true;
+        }
+
     }
 
     @Override

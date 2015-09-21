@@ -16,6 +16,7 @@
 
 package com.hazelcast.client.proxy;
 
+import com.hazelcast.client.impl.ClientMessageDecoder;
 import com.hazelcast.client.impl.protocol.ClientMessage;
 import com.hazelcast.client.impl.protocol.codec.ListAddAllCodec;
 import com.hazelcast.client.impl.protocol.codec.ListAddAllWithIndexCodec;
@@ -43,6 +44,7 @@ import com.hazelcast.client.impl.protocol.codec.ListSubCodec;
 import com.hazelcast.client.spi.ClientClusterService;
 import com.hazelcast.client.spi.ClientProxy;
 import com.hazelcast.client.spi.EventHandler;
+import com.hazelcast.client.spi.impl.ListenerRemoveCodec;
 import com.hazelcast.core.IList;
 import com.hazelcast.core.ItemEvent;
 import com.hazelcast.core.ItemEventType;
@@ -238,12 +240,27 @@ public class ClientListProxy<E> extends ClientProxy implements IList<E> {
         ClientMessage request = ListAddListenerCodec.encodeRequest(name, includeValue);
 
         EventHandler<ClientMessage> eventHandler = new ItemEventHandler(includeValue, listener);
-        return listen(request, getPartitionKey(), eventHandler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) ListAddListenerCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, getPartitionKey(), eventHandler, responseDecoder);
     }
 
     public boolean removeItemListener(String registrationId) {
-        ClientMessage request = ListRemoveListenerCodec.encodeRequest(name, registrationId);
-        return stopListening(request, registrationId);
+        return stopListening(registrationId, new ListenerRemoveCodec() {
+            @Override
+            public ClientMessage encodeRequest(String realRegistrationId) {
+                return ListRemoveListenerCodec.encodeRequest(name, realRegistrationId);
+            }
+
+            @Override
+            public boolean decodeResponse(ClientMessage clientMessage) {
+                return ListRemoveListenerCodec.decodeResponse(clientMessage).response;
+            }
+        });
     }
 
     private class ItemEventHandler extends ListAddListenerCodec.AbstractEventHandler

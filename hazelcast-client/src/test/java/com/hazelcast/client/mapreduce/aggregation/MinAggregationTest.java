@@ -20,7 +20,7 @@ import com.hazelcast.core.IMap;
 import com.hazelcast.mapreduce.aggregation.Aggregation;
 import com.hazelcast.mapreduce.aggregation.Aggregations;
 import com.hazelcast.mapreduce.aggregation.Supplier;
-import com.hazelcast.test.HazelcastSerialClassRunner;
+import com.hazelcast.test.HazelcastParallelClassRunner;
 import com.hazelcast.test.annotation.QuickTest;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -32,12 +32,12 @@ import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
 
-@RunWith(HazelcastSerialClassRunner.class)
+@RunWith(HazelcastParallelClassRunner.class)
 @Category(QuickTest.class)
 public class MinAggregationTest
         extends AbstractAggregationTest {
 
-    @Test
+    @Test(timeout = 60000)
     public void testBigDecimalMin()
             throws Exception {
 
@@ -59,7 +59,7 @@ public class MinAggregationTest
         assertEquals(expectation, result);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testBigIntegerMin()
             throws Exception {
 
@@ -81,7 +81,7 @@ public class MinAggregationTest
         assertEquals(expectation, result);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testDoubleMin()
             throws Exception {
 
@@ -105,7 +105,7 @@ public class MinAggregationTest
         assertEquals(expectation, result, 0.0);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testIntegerMin()
             throws Exception {
 
@@ -129,7 +129,7 @@ public class MinAggregationTest
         assertEquals(expectation, result);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testLongMin()
             throws Exception {
 
@@ -153,7 +153,7 @@ public class MinAggregationTest
         assertEquals(expectation, result);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testBigDecimalMinWithExtractor()
             throws Exception {
 
@@ -175,7 +175,7 @@ public class MinAggregationTest
         assertEquals(expectation, result);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testBigIntegerMinWithExtractor()
             throws Exception {
 
@@ -197,7 +197,7 @@ public class MinAggregationTest
         assertEquals(expectation, result);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testDoubleMinWithExtractor()
             throws Exception {
 
@@ -221,7 +221,7 @@ public class MinAggregationTest
         assertEquals(expectation, result, 0.0);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testIntegerMinWithExtractor()
             throws Exception {
 
@@ -245,7 +245,7 @@ public class MinAggregationTest
         assertEquals(expectation, result);
     }
 
-    @Test
+    @Test(timeout = 60000)
     public void testLongMinWithExtractor()
             throws Exception {
 
@@ -273,7 +273,7 @@ public class MinAggregationTest
             throws Exception {
 
         String mapName = randomMapName();
-        IMap<String, T> map = HAZELCAST_INSTANCE.getMap(mapName);
+        IMap<String, T> map = client.getMap(mapName);
 
         for (int i = 0; i < values.length; i++) {
             map.put("key-" + i, values[i]);
@@ -287,7 +287,7 @@ public class MinAggregationTest
             throws Exception {
 
         String mapName = randomMapName();
-        IMap<String, Value<T>> map = HAZELCAST_INSTANCE.getMap(mapName);
+        IMap<String, Value<T>> map = client.getMap(mapName);
 
         for (int i = 0; i < values.length; i++) {
             map.put("key-" + i, values[i]);

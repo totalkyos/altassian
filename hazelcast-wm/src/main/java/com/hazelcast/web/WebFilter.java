@@ -350,7 +350,7 @@ public class WebFilter implements Filter {
             final ResponseWrapper resWrapper = new ResponseWrapper((HttpServletResponse) res);
             final RequestWrapper reqWrapper = new RequestWrapper(httpReq, resWrapper);
             if (existingReq != null) {
-                reqWrapper.setHazelcastSession(existingReq.hazelcastSession, existingReq.requestedSessionId);
+                reqWrapper.setHazelcastSession(existingReq.hazelcastSession, existingReq.clusteredSessionId);
             }
             chain.doFilter(reqWrapper, resWrapper);
             if (existingReq != null) {
@@ -394,7 +394,7 @@ public class WebFilter implements Filter {
     protected class RequestWrapper extends HttpServletRequestWrapper {
         final ResponseWrapper res;
         HazelcastHttpSession hazelcastSession;
-        String requestedSessionId;
+        String clusteredSessionId;
 
         public RequestWrapper(final HttpServletRequest req,
                               final ResponseWrapper res) {
@@ -405,7 +405,7 @@ public class WebFilter implements Filter {
 
         public void setHazelcastSession(HazelcastHttpSession hazelcastSession, String requestedSessionId) {
             this.hazelcastSession = hazelcastSession;
-            this.requestedSessionId = requestedSessionId;
+            this.clusteredSessionId = requestedSessionId;
         }
 
         HttpSession getOriginalSession(boolean create) {
@@ -438,17 +438,9 @@ public class WebFilter implements Filter {
         }
 
         public HazelcastHttpSession getOrCreateHazelcastSession() {
-            if (requestedSessionId == null) {
-                requestedSessionId = getSessionCookie(this);
-                if (requestedSessionId == null) {
-                    requestedSessionId = getParameter(HAZELCAST_SESSION_COOKIE_NAME);
-                }
-            }
-            if (requestedSessionId != null) {
-                hazelcastSession = getSessionWithId(requestedSessionId);
-            }
-            if (hazelcastSession == null &&  !res.isCommitted()) {
-                hazelcastSession = createNewSession(RequestWrapper.this, requestedSessionId);
+
+            if (hazelcastSession == null && !res.isCommitted()) {
+                hazelcastSession = createNewSession(RequestWrapper.this, clusteredSessionId);
             }
             return hazelcastSession;
         }
@@ -474,9 +466,6 @@ public class WebFilter implements Filter {
                 destroySession(hazelcastSession, true);
                 hazelcastSession = null;
             } else if (hazelcastSession != null) {
-                if (!hazelcastSession.isStickySession()) {
-                    hazelcastSession.updateReloadFlag();
-                }
                 return hazelcastSession;
             }
             HttpSession originalSession = getOriginalSession(false);
@@ -492,8 +481,25 @@ public class WebFilter implements Filter {
                 originalSessions.remove(originalSession.getId());
                 originalSession.invalidate();
             }
-            if (requestedSessionId != null) {
-                hazelcastSession = sessions.get(requestedSessionId);
+            if (clusteredSessionId != null) {
+                hazelcastSession = sessions.get(clusteredSessionId);
+            }
+            return readFromCookie();
+        }
+
+        private HazelcastHttpSession readFromCookie() {
+            if (clusteredSessionId == null) {
+                clusteredSessionId = getSessionCookie(this);
+                if (clusteredSessionId == null) {
+                    clusteredSessionId = getParameter(HAZELCAST_SESSION_COOKIE_NAME);
+                }
+            }
+            if (clusteredSessionId != null) {
+                hazelcastSession = getSessionWithId(clusteredSessionId);
+                if (hazelcastSession != null && !hazelcastSession.isStickySession()) {
+                    hazelcastSession.updateReloadFlag();
+                    return hazelcastSession;
+                }
             }
             return null;
         }

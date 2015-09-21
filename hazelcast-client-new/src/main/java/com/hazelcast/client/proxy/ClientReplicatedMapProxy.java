@@ -16,11 +16,13 @@
 
 package com.hazelcast.client.proxy;
 
+import com.hazelcast.client.impl.ClientMessageDecoder;
 import com.hazelcast.client.impl.protocol.ClientMessage;
 import com.hazelcast.client.impl.protocol.codec.ReplicatedMapAddEntryListenerCodec;
 import com.hazelcast.client.impl.protocol.codec.ReplicatedMapAddEntryListenerToKeyCodec;
 import com.hazelcast.client.impl.protocol.codec.ReplicatedMapAddEntryListenerToKeyWithPredicateCodec;
 import com.hazelcast.client.impl.protocol.codec.ReplicatedMapAddEntryListenerWithPredicateCodec;
+import com.hazelcast.client.impl.protocol.codec.ReplicatedMapAddNearCacheEntryListenerCodec;
 import com.hazelcast.client.impl.protocol.codec.ReplicatedMapClearCodec;
 import com.hazelcast.client.impl.protocol.codec.ReplicatedMapContainsKeyCodec;
 import com.hazelcast.client.impl.protocol.codec.ReplicatedMapContainsValueCodec;
@@ -38,12 +40,14 @@ import com.hazelcast.client.nearcache.ClientHeapNearCache;
 import com.hazelcast.client.nearcache.ClientNearCache;
 import com.hazelcast.client.spi.ClientProxy;
 import com.hazelcast.client.spi.EventHandler;
+import com.hazelcast.client.spi.impl.ListenerRemoveCodec;
 import com.hazelcast.config.NearCacheConfig;
 import com.hazelcast.core.EntryEvent;
 import com.hazelcast.core.EntryEventType;
 import com.hazelcast.core.EntryListener;
 import com.hazelcast.core.Member;
 import com.hazelcast.core.ReplicatedMap;
+import com.hazelcast.logging.Logger;
 import com.hazelcast.nio.serialization.Data;
 import com.hazelcast.query.Predicate;
 
@@ -85,6 +89,7 @@ public class ClientReplicatedMapProxy<K, V>
     @Override
     protected void onDestroy() {
         if (nearCache != null) {
+            removeNearCacheInvalidationListener();
             nearCache.destroy();
         }
     }
@@ -98,7 +103,8 @@ public class ClientReplicatedMapProxy<K, V>
         Data keyData = toData(key);
         ClientMessage request = ReplicatedMapPutCodec.encodeRequest(getName(), keyData, valueData, timeUnit.toMillis(ttl));
         ClientMessage response = invoke(request);
-        return toObject(response);
+        ReplicatedMapPutCodec.ResponseParameters result = ReplicatedMapPutCodec.decodeResponse(response);
+        return toObject(result.response);
 
     }
 
@@ -199,16 +205,32 @@ public class ClientReplicatedMapProxy<K, V>
     }
 
     @Override
-    public boolean removeEntryListener(String id) {
-        ClientMessage request = ReplicatedMapRemoveEntryListenerCodec.encodeRequest(getName(), id);
-        return stopListening(request, id);
+    public boolean removeEntryListener(String registrationId) {
+        final String name = getName();
+        return stopListening(registrationId, new ListenerRemoveCodec() {
+            @Override
+            public ClientMessage encodeRequest(String realRegistrationId) {
+                return ReplicatedMapRemoveEntryListenerCodec.encodeRequest(name, realRegistrationId);
+            }
+
+            @Override
+            public boolean decodeResponse(ClientMessage clientMessage) {
+                return ReplicatedMapRemoveEntryListenerCodec.decodeResponse(clientMessage).response;
+            }
+        });
     }
 
     @Override
     public String addEntryListener(EntryListener<K, V> listener) {
         ClientMessage request = ReplicatedMapAddEntryListenerCodec.encodeRequest(getName());
         EventHandler<ClientMessage> handler = createHandler(listener);
-        return listen(request, null, handler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) ReplicatedMapAddEntryListenerCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, null, handler, responseDecoder);
     }
 
     @Override
@@ -217,7 +239,13 @@ public class ClientReplicatedMapProxy<K, V>
         Data keyData = toData(key);
         ClientMessage request = ReplicatedMapAddEntryListenerToKeyCodec.encodeRequest(getName(), keyData);
         EventHandler<ClientMessage> handler = createHandler(listener);
-        return listen(request, keyData, handler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) ReplicatedMapAddEntryListenerToKeyCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, keyData, handler, responseDecoder);
     }
 
     @Override
@@ -225,7 +253,13 @@ public class ClientReplicatedMapProxy<K, V>
         Data predicateData = toData(predicate);
         ClientMessage request = ReplicatedMapAddEntryListenerWithPredicateCodec.encodeRequest(getName(), predicateData);
         EventHandler<ClientMessage> handler = createHandler(listener);
-        return listen(request, null, handler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) ReplicatedMapAddEntryListenerWithPredicateCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, null, handler, responseDecoder);
     }
 
     @Override
@@ -236,7 +270,13 @@ public class ClientReplicatedMapProxy<K, V>
         ClientMessage request =
                 ReplicatedMapAddEntryListenerToKeyWithPredicateCodec.encodeRequest(getName(), keyData, predicateData);
         EventHandler<ClientMessage> handler = createHandler(listener);
-        return listen(request, keyData, handler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) ReplicatedMapAddEntryListenerToKeyWithPredicateCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, keyData, handler, responseDecoder);
     }
 
     @Override
@@ -297,6 +337,45 @@ public class ClientReplicatedMapProxy<K, V>
             ClientHeapNearCache<Object> nearCache = new ClientHeapNearCache<Object>(getName(),
                     getContext(), nearCacheConfig);
             this.nearCache = nearCache;
+            if (nearCache.isInvalidateOnChange()) {
+                addNearCacheInvalidateListener();
+            }
+        }
+    }
+
+    private void addNearCacheInvalidateListener() {
+        try {
+            ClientMessage request = ReplicatedMapAddNearCacheEntryListenerCodec.encodeRequest(getName(), false);
+            EventHandler handler = new ReplicatedMapAddNearCacheEventHandler();
+            String registrationId = getContext().getListenerService().startListening(request, null, handler,
+                    new ClientMessageDecoder() {
+                        @Override
+                        public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                            return (T) ReplicatedMapAddNearCacheEntryListenerCodec.decodeResponse(clientMessage).response;
+                        }
+                    });
+            nearCache.setId(registrationId);
+        } catch (Exception e) {
+            Logger.getLogger(ClientHeapNearCache.class).severe(
+                    "-----------------\n Near Cache is not initialized!!! \n-----------------", e);
+        }
+    }
+
+    private void removeNearCacheInvalidationListener() {
+        if (nearCache != null && nearCache.getId() != null) {
+            String registrationId = nearCache.getId();
+            final String name = getName();
+            getContext().getListenerService().stopListening(registrationId, new ListenerRemoveCodec() {
+                @Override
+                public ClientMessage encodeRequest(String realRegistrationId) {
+                    return ReplicatedMapRemoveEntryListenerCodec.encodeRequest(name, realRegistrationId);
+                }
+
+                @Override
+                public boolean decodeResponse(ClientMessage clientMessage) {
+                    return ReplicatedMapRemoveEntryListenerCodec.decodeResponse(clientMessage).response;
+                }
+            });
         }
     }
 
@@ -347,6 +426,40 @@ public class ClientReplicatedMapProxy<K, V>
 
         @Override
         public void onListenerRegister() {
+        }
+    }
+
+    private class ReplicatedMapAddNearCacheEventHandler extends ReplicatedMapAddNearCacheEntryListenerCodec.AbstractEventHandler
+            implements EventHandler<ClientMessage> {
+
+        @Override
+        public void beforeListenerRegister() {
+            if (nearCache != null) {
+                nearCache.clear();
+            }
+        }
+
+        @Override
+        public void onListenerRegister() {
+            if (nearCache != null) {
+                nearCache.clear();
+            }
+        }
+
+        @Override
+        public void handle(Data key, Data value, Data oldValue, Data mergingValue,
+                           int eventType, String uuid, int numberOfAffectedEntries) {
+            EntryEventType entryEventType = EntryEventType.getByType(eventType);
+            switch (entryEventType) {
+                case ADDED:
+                case REMOVED:
+                case UPDATED:
+                case EVICTED:
+                    nearCache.remove(toObject(key));
+                    break;
+                default:
+                    throw new IllegalArgumentException("Not a known event type " + entryEventType);
+            }
         }
     }
 }

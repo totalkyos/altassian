@@ -16,6 +16,7 @@
 
 package com.hazelcast.client.proxy;
 
+import com.hazelcast.client.impl.ClientMessageDecoder;
 import com.hazelcast.client.impl.protocol.ClientMessage;
 import com.hazelcast.client.impl.protocol.codec.ListAddListenerCodec;
 import com.hazelcast.client.impl.protocol.codec.SetAddAllCodec;
@@ -34,6 +35,7 @@ import com.hazelcast.client.impl.protocol.codec.SetSizeCodec;
 import com.hazelcast.client.spi.ClientClusterService;
 import com.hazelcast.client.spi.ClientProxy;
 import com.hazelcast.client.spi.EventHandler;
+import com.hazelcast.client.spi.impl.ListenerRemoveCodec;
 import com.hazelcast.core.ISet;
 import com.hazelcast.core.ItemEvent;
 import com.hazelcast.core.ItemEventType;
@@ -177,7 +179,27 @@ public class ClientSetProxy<E> extends ClientProxy implements ISet<E> {
         ClientMessage request = SetAddListenerCodec.encodeRequest(name, includeValue);
 
         EventHandler<ClientMessage> eventHandler = new ItemEventHandler(includeValue, listener);
-        return listen(request, getPartitionKey(), eventHandler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) SetAddListenerCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, getPartitionKey(), eventHandler, responseDecoder);
+    }
+
+    public boolean removeItemListener(String registrationId) {
+        return stopListening(registrationId, new ListenerRemoveCodec() {
+            @Override
+            public ClientMessage encodeRequest(String realRegistrationId) {
+                return SetRemoveListenerCodec.encodeRequest(name, realRegistrationId);
+            }
+
+            @Override
+            public boolean decodeResponse(ClientMessage clientMessage) {
+                return SetRemoveListenerCodec.decodeResponse(clientMessage).response;
+            }
+        });
     }
 
     private class ItemEventHandler extends ListAddListenerCodec.AbstractEventHandler
@@ -215,11 +237,6 @@ public class ClientSetProxy<E> extends ClientProxy implements ISet<E> {
         public void onListenerRegister() {
 
         }
-    }
-
-    public boolean removeItemListener(String registrationId) {
-        ClientMessage request = SetRemoveListenerCodec.encodeRequest(name, registrationId);
-        return stopListening(request, registrationId);
     }
 
     private Collection<E> getAll() {

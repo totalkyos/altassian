@@ -22,21 +22,26 @@ import com.hazelcast.core.MapLoader;
 import com.hazelcast.map.impl.mapstore.MapStoreContext;
 import com.hazelcast.map.impl.operation.LoadAllOperation;
 import com.hazelcast.map.impl.operation.LoadStatusOperation;
+import com.hazelcast.map.impl.operation.LoadStatusOperationFactory;
 import com.hazelcast.map.impl.operation.PartitionCheckIfLoadedOperation;
 import com.hazelcast.nio.serialization.Data;
 import com.hazelcast.partition.InternalPartitionService;
 import com.hazelcast.spi.ExecutionService;
+import com.hazelcast.spi.InternalCompletableFuture;
 import com.hazelcast.spi.Operation;
 import com.hazelcast.spi.OperationService;
 import com.hazelcast.spi.impl.AbstractCompletableFuture;
+import com.hazelcast.util.FutureUtil;
 import com.hazelcast.util.StateMachine;
 import com.hazelcast.util.scheduler.CoalescingDelayedTrigger;
 
 import java.io.Closeable;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -60,6 +65,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 public class MapKeyLoader {
 
     private static final long LOADING_TRIGGER_DELAY = SECONDS.toMillis(5);
+    private static final long KEY_DISTRIBUTION_TIMEOUT_MINUTES = 15;
 
     private String mapName;
     private OperationService opService;
@@ -231,7 +237,7 @@ public class MapKeyLoader {
         return state.is(State.NOT_LOADED);
     }
 
-    private void sendKeysInBatches(MapStoreContext mapStoreContext, boolean replaceExistingValues) {
+    private void sendKeysInBatches(MapStoreContext mapStoreContext, boolean replaceExistingValues) throws Exception {
 
         int clusterSize = partitionService.getMemberPartitionsMap().size();
         Iterator<Object> keys = null;
@@ -250,14 +256,20 @@ public class MapKeyLoader {
             Iterator<Entry<Integer, Data>> partitionsAndKeys = map(dataKeys, toPartition(partitionService));
             Iterator<Map<Integer, List<Data>>> batches = toBatches(partitionsAndKeys, maxBatch);
 
+            List<Future> futures = new ArrayList<Future>();
             while (batches.hasNext()) {
                 Map<Integer, List<Data>> batch = batches.next();
-                sendBatch(batch, replaceExistingValues);
+                futures.addAll(sendBatch(batch, replaceExistingValues));
             }
 
+            // This acts as a barrier to prevent re-ordering of key distribution operations (LoadAllOperation)
+            // and LoadStatusOperation(s) which indicates all keys were already loaded.
+            // Re-ordering of in-flight operations can happen during a partition migration. We are waiting here
+            // for all LoadAllOperation(s) to be ACKed by receivers and only then we send them the LoadStatusOperation
+            // See https://github.com/hazelcast/hazelcast/issues/4024 for additional details
+            FutureUtil.waitWithDeadline(futures, KEY_DISTRIBUTION_TIMEOUT_MINUTES, TimeUnit.MINUTES);
         } catch (Exception caught) {
             loadError = caught;
-
         } finally {
             sendLoadCompleted(clusterSize, partitionService.getPartitionCount(), replaceExistingValues, loadError);
 
@@ -267,29 +279,30 @@ public class MapKeyLoader {
         }
     }
 
-    private void sendBatch(Map<Integer, List<Data>> batch, boolean replaceExistingValues) {
-        for (Entry<Integer, List<Data>> e : batch.entrySet()) {
+    private List<Future> sendBatch(Map<Integer, List<Data>> batch, boolean replaceExistingValues) {
+        Set<Entry<Integer, List<Data>>> entries = batch.entrySet();
+        List<Future> futures = new ArrayList<Future>(entries.size());
+        for (Entry<Integer, List<Data>> e : entries) {
             int partitionId = e.getKey();
             List<Data> keys = e.getValue();
             LoadAllOperation op = new LoadAllOperation(mapName, keys, replaceExistingValues);
-            opService.invokeOnPartition(SERVICE_NAME, op, partitionId);
+            InternalCompletableFuture<Object> future = opService.invokeOnPartition(SERVICE_NAME, op, partitionId);
+            futures.add(future);
         }
+        return futures;
     }
 
     private void sendLoadCompleted(int clusterSize, int partitions,
-            boolean replaceExistingValues, Throwable exception) {
+            boolean replaceExistingValues, Throwable exception) throws Exception {
 
-        for (int partitionId = 0; partitionId < partitions; partitionId++) {
-            Operation op = new LoadStatusOperation(mapName, exception);
-            opService.invokeOnPartition(SERVICE_NAME, op, partitionId);
-        }
+        // notify all partitions about loading status: finished or exception encountered
+        opService.invokeOnAllPartitions(SERVICE_NAME, new LoadStatusOperationFactory(mapName, exception));
 
         // notify SENDER_BACKUP
         if (hasBackup && clusterSize > 1) {
             Operation op = new LoadStatusOperation(mapName, exception);
             opService.createInvocationBuilder(SERVICE_NAME, op, mapNamePartition).setReplicaIndex(1).invoke();
         }
-
     }
 
     public void setMaxBatch(int maxBatch) {
@@ -368,5 +381,9 @@ public class MapKeyLoader {
         public String toString() {
             return getClass().getSimpleName() + "{done=" + isDone() + "}";
         }
+    }
+
+    public void onKeyLoad(ExecutionCallback<Boolean> callback) {
+        loadFinished.andThen(callback, execService.getExecutor(MAP_LOAD_ALL_KEYS_EXECUTOR));
     }
 }

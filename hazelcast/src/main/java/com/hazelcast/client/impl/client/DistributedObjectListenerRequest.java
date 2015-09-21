@@ -20,25 +20,33 @@ import com.hazelcast.core.DistributedObjectEvent;
 import com.hazelcast.core.DistributedObjectListener;
 import com.hazelcast.spi.ProxyService;
 import com.hazelcast.spi.impl.PortableDistributedObjectEvent;
+import com.hazelcast.spi.impl.proxyservice.impl.ProxyServiceImpl;
 
 import java.security.Permission;
+import java.util.concurrent.Callable;
 
-public class DistributedObjectListenerRequest extends CallableClientRequest implements RetryableRequest {
+public class DistributedObjectListenerRequest extends CallableClientRequest implements RetryableRequest
+        , DistributedObjectListener {
 
     public DistributedObjectListenerRequest() {
     }
 
     @Override
     public Object call() throws Exception {
-        ProxyService proxyService = clientEngine.getProxyService();
-        String registrationId = proxyService.addProxyListener(new MyDistributedObjectListener());
-        endpoint.setDistributedObjectListener(registrationId);
+        final ProxyService proxyService = clientEngine.getProxyService();
+        final String registrationId = proxyService.addProxyListener(this);
+        endpoint.addDestroyAction(registrationId, new Callable() {
+            @Override
+            public Boolean call() {
+                return proxyService.removeProxyListener(registrationId);
+            }
+        });
         return registrationId;
     }
 
     @Override
     public String getServiceName() {
-        return null;
+        return ProxyServiceImpl.SERVICE_NAME;
     }
 
     @Override
@@ -51,28 +59,31 @@ public class DistributedObjectListenerRequest extends CallableClientRequest impl
         return ClientPortableHook.LISTENER;
     }
 
-    private class MyDistributedObjectListener implements DistributedObjectListener {
-        @Override
-        public void distributedObjectCreated(DistributedObjectEvent event) {
-            send(event);
-        }
+    @Override
+    public void distributedObjectCreated(DistributedObjectEvent event) {
+        send(event);
+    }
 
-        @Override
-        public void distributedObjectDestroyed(DistributedObjectEvent event) {
-            send(event);
-        }
+    @Override
+    public void distributedObjectDestroyed(DistributedObjectEvent event) {
+        send(event);
+    }
 
-        private void send(DistributedObjectEvent event) {
-            if (endpoint.isAlive()) {
-                PortableDistributedObjectEvent portableEvent = new PortableDistributedObjectEvent(
-                        event.getEventType(), event.getDistributedObject().getName(), event.getServiceName());
-                endpoint.sendEvent(null, portableEvent, getCallId());
-            }
+    private void send(DistributedObjectEvent event) {
+        if (endpoint.isAlive()) {
+            PortableDistributedObjectEvent portableEvent = new PortableDistributedObjectEvent(
+                    event.getEventType(), event.getDistributedObject().getName(), event.getServiceName());
+            endpoint.sendEvent(null, portableEvent, getCallId());
         }
     }
 
     @Override
     public Permission getRequiredPermission() {
         return null;
+    }
+
+    @Override
+    public String getMethodName() {
+        return "addDistributedObjectListener";
     }
 }
