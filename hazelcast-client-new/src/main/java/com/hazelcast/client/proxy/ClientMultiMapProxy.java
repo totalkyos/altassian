@@ -16,8 +16,8 @@
 
 package com.hazelcast.client.proxy;
 
+import com.hazelcast.client.impl.ClientMessageDecoder;
 import com.hazelcast.client.impl.protocol.ClientMessage;
-import com.hazelcast.client.impl.protocol.codec.MapAddEntryListenerCodec;
 import com.hazelcast.client.impl.protocol.codec.MultiMapAddEntryListenerCodec;
 import com.hazelcast.client.impl.protocol.codec.MultiMapAddEntryListenerToKeyCodec;
 import com.hazelcast.client.impl.protocol.codec.MultiMapClearCodec;
@@ -41,6 +41,7 @@ import com.hazelcast.client.impl.protocol.codec.MultiMapValueCountCodec;
 import com.hazelcast.client.impl.protocol.codec.MultiMapValuesCodec;
 import com.hazelcast.client.spi.ClientProxy;
 import com.hazelcast.client.spi.EventHandler;
+import com.hazelcast.client.spi.impl.ListenerRemoveCodec;
 import com.hazelcast.core.EntryEvent;
 import com.hazelcast.core.EntryEventType;
 import com.hazelcast.core.EntryListener;
@@ -266,12 +267,27 @@ public class ClientMultiMapProxy<K, V> extends ClientProxy implements MultiMap<K
         ClientMessage request = MultiMapAddEntryListenerCodec.encodeRequest(name, includeValue);
 
         EventHandler<ClientMessage> handler = createHandler(listener, includeValue);
-        return listen(request, handler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) MultiMapAddEntryListenerCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, handler, responseDecoder);
     }
 
     public boolean removeEntryListener(String registrationId) {
-        ClientMessage request = MultiMapRemoveEntryListenerCodec.encodeRequest(name, registrationId);
-        return stopListening(request, registrationId);
+        return stopListening(registrationId, new ListenerRemoveCodec() {
+            @Override
+            public ClientMessage encodeRequest(String realRegistrationId) {
+                return MultiMapRemoveEntryListenerCodec.encodeRequest(name, realRegistrationId);
+            }
+
+            @Override
+            public boolean decodeResponse(ClientMessage clientMessage) {
+                return MultiMapRemoveEntryListenerCodec.decodeResponse(clientMessage).response;
+            }
+        });
     }
 
     public String addEntryListener(EntryListener<K, V> listener, K key, boolean includeValue) {
@@ -279,7 +295,13 @@ public class ClientMultiMapProxy<K, V> extends ClientProxy implements MultiMap<K
         ClientMessage request = MultiMapAddEntryListenerToKeyCodec.encodeRequest(name, keyData, includeValue);
 
         EventHandler<ClientMessage> handler = createHandler(listener, includeValue);
-        return listen(request, keyData, handler);
+        ClientMessageDecoder responseDecoder = new ClientMessageDecoder() {
+            @Override
+            public <T> T decodeClientMessage(ClientMessage clientMessage) {
+                return (T) MultiMapAddEntryListenerToKeyCodec.decodeResponse(clientMessage).response;
+            }
+        };
+        return listen(request, keyData, handler, responseDecoder);
     }
 
     public void lock(K key) {
@@ -407,7 +429,7 @@ public class ClientMultiMapProxy<K, V> extends ClientProxy implements MultiMap<K
         return "MultiMap{" + "name='" + getName() + '\'' + '}';
     }
 
-    private class ClientMultiMapEventHandler extends MapAddEntryListenerCodec.AbstractEventHandler
+    private class ClientMultiMapEventHandler extends MultiMapAddEntryListenerCodec.AbstractEventHandler
             implements EventHandler<ClientMessage> {
 
         private final ListenerAdapter listenerAdapter;

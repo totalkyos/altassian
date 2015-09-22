@@ -19,6 +19,7 @@ package com.hazelcast.client.cache.impl;
 import com.hazelcast.cache.CacheStatistics;
 import com.hazelcast.cache.impl.ICacheInternal;
 import com.hazelcast.cache.impl.nearcache.NearCache;
+import com.hazelcast.client.impl.ClientMessageDecoder;
 import com.hazelcast.client.impl.HazelcastClientInstanceImpl;
 import com.hazelcast.client.impl.protocol.ClientMessage;
 import com.hazelcast.client.impl.protocol.codec.CacheGetAllCodec;
@@ -60,18 +61,33 @@ abstract class AbstractClientCacheProxy<K, V>
         extends AbstractClientInternalCacheProxy<K, V>
         implements ICacheInternal<K, V> {
 
+    private static ClientMessageDecoder cacheGetResponseDecoder = new ClientMessageDecoder() {
+        @Override
+        public <T> T decodeClientMessage(ClientMessage clientMessage) {
+            return (T) CacheGetCodec.decodeResponse(clientMessage).response;
+        }
+    };
+
     protected AbstractClientCacheProxy(CacheConfig cacheConfig, ClientContext clientContext,
                                        HazelcastClientCacheManager cacheManager) {
         super(cacheConfig, clientContext, cacheManager);
+    }
+
+    protected Object getFromNearCache(Data keyData, boolean async) {
+        Object cached = nearCache != null ? nearCache.get(keyData) : null;
+        if (cached != null && NearCache.NULL_OBJECT != cached) {
+            return !async ? cached : createCompletedFuture(cached);
+        }
+        return null;
     }
 
     protected Object getInternal(K key, ExpiryPolicy expiryPolicy, boolean async) {
         ensureOpen();
         validateNotNull(key);
         final Data keyData = toData(key);
-        Object cached = nearCache != null ? nearCache.get(keyData) : null;
-        if (cached != null && !NearCache.NULL_OBJECT.equals(cached)) {
-            return createCompletedFuture(cached);
+        Object cached = getFromNearCache(keyData, async);
+        if (cached != null) {
+            return cached;
         }
         final Data expiryPolicyData = toData(expiryPolicy);
         ClientMessage request = CacheGetCodec.encodeRequest(nameWithPrefix, keyData, expiryPolicyData);
@@ -85,7 +101,8 @@ abstract class AbstractClientCacheProxy<K, V>
             throw ExceptionUtil.rethrow(e);
         }
         SerializationService serializationService = clientContext.getSerializationService();
-        ClientDelegatingFuture<V> delegatingFuture = new ClientDelegatingFuture<V>(future, serializationService);
+        ClientDelegatingFuture<V> delegatingFuture =
+                new ClientDelegatingFuture<V>(future, serializationService, cacheGetResponseDecoder);
         if (async) {
             if (nearCache != null) {
                 delegatingFuture.andThenInternal(new ExecutionCallback<Data>() {
@@ -102,9 +119,13 @@ abstract class AbstractClientCacheProxy<K, V>
             try {
                 Object value = delegatingFuture.get();
                 if (nearCache != null) {
-                    storeInNearCache(keyData, serializationService.toData(value), null);
+                    storeInNearCache(keyData, (Data) delegatingFuture.getResponse(), null);
                 }
-                return serializationService.toObject(value);
+                if (!(value instanceof Data)) {
+                    return value;
+                } else {
+                    return serializationService.toObject(value);
+                }
             } catch (Throwable e) {
                 throw ExceptionUtil.rethrowAllowedTypeFirst(e, CacheException.class);
             }
@@ -168,32 +189,32 @@ abstract class AbstractClientCacheProxy<K, V>
 
     @Override
     public ICompletableFuture<Boolean> replaceAsync(K key, V value) {
-        return replaceAsyncInternal(key, null, value, null, false, false, false);
+        return replaceAsyncInternal(key, null, value, null, false, false);
     }
 
     @Override
     public ICompletableFuture<Boolean> replaceAsync(K key, V value, ExpiryPolicy expiryPolicy) {
-        return replaceAsyncInternal(key, null, value, expiryPolicy, false, false, false);
+        return replaceAsyncInternal(key, null, value, expiryPolicy, false, false);
     }
 
     @Override
     public ICompletableFuture<Boolean> replaceAsync(K key, V oldValue, V newValue) {
-        return replaceAsyncInternal(key, oldValue, newValue, null, true, false, false);
+        return replaceAsyncInternal(key, oldValue, newValue, null, true, false);
     }
 
     @Override
     public ICompletableFuture<Boolean> replaceAsync(K key, V oldValue, V newValue, ExpiryPolicy expiryPolicy) {
-        return replaceAsyncInternal(key, oldValue, newValue, expiryPolicy, true, false, false);
+        return replaceAsyncInternal(key, oldValue, newValue, expiryPolicy, true, false);
     }
 
     @Override
     public ICompletableFuture<V> getAndReplaceAsync(K key, V value) {
-        return replaceAsyncInternal(key, null, value, null, false, true, false);
+        return replaceAndGetAsyncInternal(key, null, value, null, false, false);
     }
 
     @Override
     public ICompletableFuture<V> getAndReplaceAsync(K key, V value, ExpiryPolicy expiryPolicy) {
-        return replaceAsyncInternal(key, null, value, expiryPolicy, false, true, false);
+        return replaceAndGetAsyncInternal(key, null, value, expiryPolicy, false, false);
     }
 
     @Override
@@ -291,7 +312,7 @@ abstract class AbstractClientCacheProxy<K, V>
 
     @Override
     public boolean replace(K key, V oldValue, V newValue, ExpiryPolicy expiryPolicy) {
-        final Future<Boolean> f = replaceAsyncInternal(key, oldValue, newValue, expiryPolicy, true, false, true);
+        final Future<Boolean> f = replaceAsyncInternal(key, oldValue, newValue, expiryPolicy, true, true);
         try {
             return (Boolean) toObject(f.get());
         } catch (Throwable e) {
@@ -301,7 +322,7 @@ abstract class AbstractClientCacheProxy<K, V>
 
     @Override
     public boolean replace(K key, V value, ExpiryPolicy expiryPolicy) {
-        final Future<Boolean> f = replaceAsyncInternal(key, null, value, expiryPolicy, false, false, true);
+        final Future<Boolean> f = replaceAsyncInternal(key, null, value, expiryPolicy, false, true);
         try {
             return (Boolean) toObject(f.get());
         } catch (Throwable e) {
@@ -311,7 +332,7 @@ abstract class AbstractClientCacheProxy<K, V>
 
     @Override
     public V getAndReplace(K key, V value, ExpiryPolicy expiryPolicy) {
-        final Future<V> f = replaceAsyncInternal(key, null, value, expiryPolicy, false, true, true);
+        final Future<V> f = replaceAndGetAsyncInternal(key, null, value, expiryPolicy, false, true);
         try {
             return toObject(f.get());
         } catch (Throwable e) {

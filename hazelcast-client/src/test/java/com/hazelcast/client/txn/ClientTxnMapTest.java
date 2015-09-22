@@ -16,8 +16,7 @@
 
 package com.hazelcast.client.txn;
 
-import com.hazelcast.client.HazelcastClient;
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.client.test.TestHazelcastFactory;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 import com.hazelcast.core.TransactionalMap;
@@ -29,8 +28,8 @@ import com.hazelcast.transaction.TransactionContext;
 import com.hazelcast.transaction.TransactionException;
 import com.hazelcast.transaction.TransactionalTask;
 import com.hazelcast.transaction.TransactionalTaskContext;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -55,20 +54,21 @@ import static org.junit.Assert.fail;
 @Category(QuickTest.class)
 public class ClientTxnMapTest {
 
-    static HazelcastInstance client;
-    static HazelcastInstance server;
+    private final TestHazelcastFactory hazelcastFactory = new TestHazelcastFactory();
 
-    @BeforeClass
-    public static void init() {
-        server = Hazelcast.newHazelcastInstance();
-        client = HazelcastClient.newHazelcastClient();
+    private HazelcastInstance client;
+
+    @After
+    public void tearDown() {
+        hazelcastFactory.terminateAll();
     }
 
-    @AfterClass
-    public static void destroy() {
-        HazelcastClient.shutdownAll();
-        Hazelcast.shutdownAll();
+    @Before
+    public void setup() {
+        hazelcastFactory.newHazelcastInstance();
+        client = hazelcastFactory.newHazelcastClient();
     }
+
 
     @Test
     public void testUnlockAfterRollback() {
@@ -274,21 +274,22 @@ public class ClientTxnMapTest {
         final String mapName = randomString();
         IMap map = client.getMap(mapName);
         map.put("key1", "value1");
+        map.put("key2", "value1");
 
         final TransactionContext context = client.newTransactionContext();
         context.beginTransaction();
         final TransactionalMap<Object, Object> txMap = context.getMap(mapName);
 
-        assertNull(txMap.put("key2", "value2"));
-        assertEquals(2, txMap.size());
-        assertEquals(2, txMap.keySet().size());
-        assertEquals(2, txMap.values().size());
+        assertNull(txMap.put("key3", "value2"));
+        assertEquals(3, txMap.size());
+        assertEquals(3, txMap.keySet().size());
+        assertEquals(3, txMap.values().size());
 
         context.commitTransaction();
 
-        assertEquals(2, map.size());
-        assertEquals(2, map.keySet().size());
-        assertEquals(2, map.values().size());
+        assertEquals(3, map.size());
+        assertEquals(3, map.keySet().size());
+        assertEquals(3, map.values().size());
     }
 
     @Test
@@ -319,6 +320,30 @@ public class ClientTxnMapTest {
         assertEquals(2, map.values().size());
     }
 
+    @Test
+    public void testDuplicateValuesWithPredicates() throws Exception {
+        final String mapName = randomString();
+        IMap map = client.getMap(mapName);
+
+        final SampleObjects.Employee emp1 = new SampleObjects.Employee("employee1", 10, true, 10D);
+
+        map.put("employee1", emp1);
+
+        final TransactionContext context = client.newTransactionContext();
+        context.beginTransaction();
+        final TransactionalMap txMap = context.getMap(mapName);
+
+        assertNull(txMap.put("employee1_repeated", emp1));
+
+        assertEquals(2, txMap.size());
+        assertEquals(2, txMap.keySet(new SqlPredicate("age = 10")).size());
+        assertEquals(2, txMap.values(new SqlPredicate("age = 10")).size());
+
+        context.commitTransaction();
+
+        assertEquals(2, map.keySet(new SqlPredicate("age = 10")).size());
+        assertEquals(2, map.values(new SqlPredicate("age = 10")).size());
+    }
 
     @Test
     public void testPutAndRoleBack() throws Exception {

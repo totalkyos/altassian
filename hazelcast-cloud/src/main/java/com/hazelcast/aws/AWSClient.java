@@ -31,23 +31,26 @@ public class AWSClient {
         if (awsConfig == null) {
             throw new IllegalArgumentException("AwsConfig is required!");
         }
-        if (awsConfig.getAccessKey() == null) {
-            throw new IllegalArgumentException("AWS access key is required!");
+        if (awsConfig.getAccessKey() == null && awsConfig.getIamRole() == null) {
+            throw new IllegalArgumentException("AWS access key or IAM Role is required!");
         }
-        if (awsConfig.getSecretKey() == null) {
-            throw new IllegalArgumentException("AWS secret key is required!");
+        if (awsConfig.getSecretKey() == null && awsConfig.getIamRole() == null) {
+            throw new IllegalArgumentException("AWS secret key or Iam Role is required!");
         }
         this.awsConfig = awsConfig;
         endpoint = awsConfig.getHostHeader();
+        if (awsConfig.getRegion() != null && awsConfig.getRegion().length() > 0) {
+            setEndpoint("ec2." + awsConfig.getRegion() + ".amazonaws.com");
+        }
     }
 
     public Collection<String> getPrivateIpAddresses() throws Exception {
-        final Map<String, String> result = new DescribeInstances(awsConfig).execute();
+        final Map<String, String> result = new DescribeInstances(awsConfig, endpoint).execute();
         return result.keySet();
     }
 
     public Map<String, String> getAddresses() throws Exception {
-        return new DescribeInstances(awsConfig).execute();
+        return new DescribeInstances(awsConfig, endpoint).execute();
     }
 
     public void setEndpoint(String s) {

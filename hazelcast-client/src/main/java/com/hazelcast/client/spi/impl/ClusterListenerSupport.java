@@ -17,7 +17,6 @@
 package com.hazelcast.client.spi.impl;
 
 import com.hazelcast.client.AuthenticationException;
-import com.hazelcast.client.config.ClientAwsConfig;
 import com.hazelcast.client.config.ClientNetworkConfig;
 import com.hazelcast.client.connection.AddressProvider;
 import com.hazelcast.client.connection.Authenticator;
@@ -28,6 +27,7 @@ import com.hazelcast.client.impl.LifecycleServiceImpl;
 import com.hazelcast.client.impl.client.AuthenticationRequest;
 import com.hazelcast.client.impl.client.ClientPrincipal;
 import com.hazelcast.client.spi.ClientClusterService;
+import com.hazelcast.client.spi.ClientExecutionService;
 import com.hazelcast.core.LifecycleEvent;
 import com.hazelcast.core.Member;
 import com.hazelcast.logging.ILogger;
@@ -41,6 +41,7 @@ import com.hazelcast.security.Credentials;
 import com.hazelcast.spi.impl.SerializableCollection;
 import com.hazelcast.util.Clock;
 import com.hazelcast.util.ExceptionUtil;
+import com.hazelcast.util.executor.PoolExecutorThreadFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -51,17 +52,22 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 public abstract class ClusterListenerSupport implements ConnectionListener, ConnectionHeartbeatListener,
         ClientClusterService {
 
     private static final ILogger LOGGER = Logger.getLogger(ClusterListenerSupport.class);
+    private static final long TERMINATE_TIMEOUT_SECONDS = 30;
 
     protected final HazelcastClientInstanceImpl client;
     private final Collection<AddressProvider> addressProviders;
     private final ManagerAuthenticator managerAuthenticator = new ManagerAuthenticator();
+    private final ExecutorService clusterExecutor;
     private final boolean shuffleMemberList;
 
     private Credentials credentials;
@@ -71,24 +77,19 @@ public abstract class ClusterListenerSupport implements ConnectionListener, Conn
     private volatile Address ownerConnectionAddress;
     private volatile ClientPrincipal principal;
 
-    public ClusterListenerSupport(HazelcastClientInstanceImpl client) {
+    public ClusterListenerSupport(HazelcastClientInstanceImpl client, Collection<AddressProvider> addressProviders) {
         this.client = client;
+        this.addressProviders = addressProviders;
+        this.shuffleMemberList = client.getClientProperties().getShuffleMemberList().getBoolean();
+        this.clusterExecutor = createSingleThreadExecutorService(client);
+    }
 
-        ClientNetworkConfig networkConfig = client.getClientConfig().getNetworkConfig();
-        final ClientAwsConfig awsConfig = networkConfig.getAwsConfig();
-        addressProviders = new LinkedList<AddressProvider>();
-
-        addressProviders.add(new DefaultAddressProvider(networkConfig));
-
-        if (awsConfig != null && awsConfig.isEnabled()) {
-            try {
-                addressProviders.add(new AwsAddressProvider(awsConfig));
-            } catch (NoClassDefFoundError e) {
-                LOGGER.log(Level.WARNING, "hazelcast-cloud.jar might be missing!");
-                throw e;
-            }
-        }
-        shuffleMemberList = client.getClientProperties().getShuffleMemberList().getBoolean();
+    private ExecutorService createSingleThreadExecutorService(HazelcastClientInstanceImpl client) {
+        ThreadGroup threadGroup = client.getThreadGroup();
+        ClassLoader classLoader = client.getClientConfig().getClassLoader();
+        PoolExecutorThreadFactory threadFactory =
+                new PoolExecutorThreadFactory(threadGroup, client.getName() + ".cluster-", classLoader);
+        return Executors.newSingleThreadExecutor(threadFactory);
     }
 
     protected void init() {
@@ -102,6 +103,19 @@ public abstract class ClusterListenerSupport implements ConnectionListener, Conn
 
     public Address getOwnerConnectionAddress() {
         return ownerConnectionAddress;
+    }
+
+    public void shutdown() {
+        clusterExecutor.shutdown();
+        try {
+            boolean success = clusterExecutor.awaitTermination(TERMINATE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!success) {
+                LOGGER.warning("ClientClusterService shutdown could not completed in "
+                        + TERMINATE_TIMEOUT_SECONDS + " seconds");
+            }
+        } catch (InterruptedException e) {
+            LOGGER.warning("ClientClusterService shutdown is interrupted", e);
+        }
     }
 
     private class ManagerAuthenticator implements Authenticator {
@@ -223,9 +237,15 @@ public abstract class ClusterListenerSupport implements ConnectionListener, Conn
         return false;
     }
 
-    private void fireConnectionEvent(LifecycleEvent.LifecycleState state) {
-        final LifecycleServiceImpl lifecycleService = (LifecycleServiceImpl) client.getLifecycleService();
-        lifecycleService.fireLifecycleEvent(state);
+    private void fireConnectionEvent(final LifecycleEvent.LifecycleState state) {
+        ClientExecutionService executionService = client.getClientExecutionService();
+        executionService.execute(new Runnable() {
+            @Override
+            public void run() {
+                final LifecycleServiceImpl lifecycleService = (LifecycleServiceImpl) client.getLifecycleService();
+                lifecycleService.fireLifecycleEvent(state);
+            }
+        });
     }
 
     @Override
@@ -235,10 +255,9 @@ public abstract class ClusterListenerSupport implements ConnectionListener, Conn
 
     @Override
     public void connectionRemoved(Connection connection) {
-        ClientExecutionServiceImpl executionService = (ClientExecutionServiceImpl) client.getClientExecutionService();
         if (connection.getEndPoint().equals(ownerConnectionAddress)) {
             if (client.getLifecycleService().isRunning()) {
-                executionService.executeInternal(new Runnable() {
+                clusterExecutor.execute(new Runnable() {
                     @Override
                     public void run() {
                         try {

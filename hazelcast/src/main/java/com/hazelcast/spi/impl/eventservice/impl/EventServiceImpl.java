@@ -60,6 +60,7 @@ import static com.hazelcast.util.FutureUtil.ExceptionHandler;
 import static com.hazelcast.util.FutureUtil.waitWithDeadline;
 
 public class EventServiceImpl implements InternalEventService {
+
     private static final EventRegistration[] EMPTY_REGISTRATIONS = new EventRegistration[0];
 
     private static final int EVENT_SYNC_FREQUENCY = 100000;
@@ -282,9 +283,8 @@ public class EventServiceImpl implements InternalEventService {
         if (!(registration instanceof Registration)) {
             throw new IllegalArgumentException();
         }
-        final Registration reg = (Registration) registration;
-        if (isLocal(reg)) {
-            executeLocal(serviceName, event, reg, orderKey);
+        if (isLocal(registration)) {
+            executeLocal(serviceName, event, registration, orderKey);
         } else {
             final Address subscriber = registration.getSubscriber();
             sendEventPacket(subscriber, new EventPacket(registration.getId(), serviceName, event), orderKey);
@@ -292,17 +292,14 @@ public class EventServiceImpl implements InternalEventService {
     }
 
     @Override
-    public void publishEvent(String serviceName, Collection<EventRegistration> registrations,
-                             Object event, int orderKey) {
-
+    public void publishEvent(String serviceName, Collection<EventRegistration> registrations, Object event, int orderKey) {
         Data eventData = null;
         for (EventRegistration registration : registrations) {
             if (!(registration instanceof Registration)) {
                 throw new IllegalArgumentException();
             }
-            Registration reg = (Registration) registration;
-            if (isLocal(reg)) {
-                executeLocal(serviceName, event, reg, orderKey);
+            if (isLocal(registration)) {
+                executeLocal(serviceName, event, registration, orderKey);
                 continue;
             }
 
@@ -314,8 +311,27 @@ public class EventServiceImpl implements InternalEventService {
         }
     }
 
-    private void executeLocal(String serviceName, Object event, Registration reg, int orderKey) {
+    @Override
+    public void publishRemoteEvent(String serviceName, Collection<EventRegistration> registrations, Object event, int orderKey) {
+        if (registrations.isEmpty()) {
+            return;
+        }
+        Data eventData = nodeEngine.toData(event);
+        for (EventRegistration registration : registrations) {
+            if (!(registration instanceof Registration)) {
+                throw new IllegalArgumentException();
+            }
+            if (isLocal(registration)) {
+                continue;
+            }
+            EventPacket eventPacket = new EventPacket(registration.getId(), serviceName, eventData);
+            sendEventPacket(registration.getSubscriber(), eventPacket, orderKey);
+        }
+    }
+
+    private void executeLocal(String serviceName, Object event, EventRegistration registration, int orderKey) {
         if (nodeEngine.isActive()) {
+            Registration reg = (Registration) registration;
             try {
                 if (reg.getListener() != null) {
                     eventExecutor.execute(new LocalEventDispatcher(this, serviceName, event, reg.getListener()
@@ -365,7 +381,7 @@ public class EventServiceImpl implements InternalEventService {
                     = new ConstructorFunction<String, EventServiceSegment>() {
                 @Override
                 public EventServiceSegment createNew(String key) {
-                    return new EventServiceSegment(key);
+                    return new EventServiceSegment(key, nodeEngine.getService(key));
                 }
             };
             return ConcurrencyUtil.getOrPutIfAbsent(segments, service, func);
@@ -373,7 +389,7 @@ public class EventServiceImpl implements InternalEventService {
         return segment;
     }
 
-    boolean isLocal(Registration reg) {
+    boolean isLocal(EventRegistration reg) {
         return nodeEngine.getThisAddress().equals(reg.getSubscriber());
     }
 
@@ -407,7 +423,7 @@ public class EventServiceImpl implements InternalEventService {
         final Collection<Registration> registrations = new LinkedList<Registration>();
         for (EventServiceSegment segment : segments.values()) {
             //todo: this should be moved into the Segment.
-            for (Registration reg : segment.getRegistrationIdMap().values()) {
+            for (Registration reg : (Iterable<Registration>) segment.getRegistrationIdMap().values()) {
                 if (!reg.isLocalOnly()) {
                     registrations.add(reg);
                 }
@@ -440,4 +456,5 @@ public class EventServiceImpl implements InternalEventService {
             logger.log(level, String.format(message, args));
         }
     }
+
 }

@@ -17,14 +17,14 @@
 package com.hazelcast.client.map;
 
 import com.hazelcast.client.impl.client.AuthenticationRequest;
-import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.client.map.helpers.GenericEvent;
+import com.hazelcast.client.test.TestHazelcastFactory;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MapStoreConfig;
 import com.hazelcast.core.EntryAdapter;
 import com.hazelcast.core.EntryEvent;
 import com.hazelcast.core.EntryListener;
 import com.hazelcast.core.ExecutionCallback;
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 import com.hazelcast.core.MapEvent;
@@ -39,10 +39,11 @@ import com.hazelcast.nio.serialization.DataSerializable;
 import com.hazelcast.query.Predicate;
 import com.hazelcast.query.SqlPredicate;
 import com.hazelcast.security.UsernamePasswordCredentials;
+import com.hazelcast.test.AssertTask;
 import com.hazelcast.test.HazelcastParallelClassRunner;
 import com.hazelcast.test.annotation.QuickTest;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -60,6 +61,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.hazelcast.test.HazelcastTestSupport.assertOpenEventually;
+import static com.hazelcast.test.HazelcastTestSupport.assertTrueEventually;
 import static com.hazelcast.test.HazelcastTestSupport.randomString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -71,14 +73,21 @@ import static org.junit.Assert.assertTrue;
 @Category(QuickTest.class)
 public class ClientMapTest {
 
-    static HazelcastInstance client;
-    static HazelcastInstance server;
+    private final TestHazelcastFactory hazelcastFactory = new TestHazelcastFactory();
 
-    static TestMapStore flushMapStore = new TestMapStore();
-    static TestMapStore transientMapStore = new TestMapStore();
+    @After
+    public void tearDown() {
+        hazelcastFactory.terminateAll();
+    }
 
-    @BeforeClass
-    public static void init() {
+    private HazelcastInstance client;
+    private HazelcastInstance server;
+
+    private TestMapStore flushMapStore = new TestMapStore();
+    private TestMapStore transientMapStore = new TestMapStore();
+
+    @Before
+    public void setup() {
         Config config = new Config();
         config.getMapConfig("flushMap").
                 setMapStoreConfig(new MapStoreConfig()
@@ -89,19 +98,13 @@ public class ClientMapTest {
                         .setWriteDelaySeconds(1000)
                         .setImplementation(transientMapStore));
 
-        server = Hazelcast.newHazelcastInstance(config);
-        client = HazelcastClient.newHazelcastClient(null);
+        server = hazelcastFactory.newHazelcastInstance(config);
+        client = hazelcastFactory.newHazelcastClient(null);
     }
 
 
     public IMap createMap() {
         return client.getMap(randomString());
-    }
-
-    @AfterClass
-    public static void destroy() {
-        client.shutdown();
-        Hazelcast.shutdownAll();
     }
 
     @Test
@@ -310,8 +313,12 @@ public class ClientMapTest {
         final IMap map = createMap();
         map.put("key1", "value1", 1, TimeUnit.SECONDS);
         assertNotNull(map.get("key1"));
-        Thread.sleep(2000);
-        assertNull(map.get("key1"));
+        assertTrueEventually(new AssertTask() {
+            @Override
+            public void run() throws Exception {
+                assertNull(map.get("key1"));
+            }
+        });
     }
 
     @Test
@@ -326,7 +333,12 @@ public class ClientMapTest {
         final IMap map = createMap();
         assertNull(map.putIfAbsent("key1", "value1", 1, TimeUnit.SECONDS));
         assertEquals("value1", map.putIfAbsent("key1", "value3", 1, TimeUnit.SECONDS));
-        Thread.sleep(6000);
+        assertTrueEventually(new AssertTask() {
+            @Override
+            public void run() throws Exception {
+                assertNull(map.get("key1"));
+            }
+        });
         assertNull(map.putIfAbsent("key1", "value3", 1, TimeUnit.SECONDS));
         assertEquals("value3", map.putIfAbsent("key1", "value4", 1, TimeUnit.SECONDS));
     }
@@ -343,8 +355,12 @@ public class ClientMapTest {
         map.set("key1", "value3", 1, TimeUnit.SECONDS);
         assertEquals("value3", map.get("key1"));
 
-        Thread.sleep(2000);
-        assertNull(map.get("key1"));
+        assertTrueEventually(new AssertTask() {
+            @Override
+            public void run() throws Exception {
+                assertNull(map.get("key1"));
+            }
+        });
 
     }
 
@@ -498,6 +514,14 @@ public class ClientMapTest {
     }
 
     @Test
+    public void testExecuteOnKey() throws Exception {
+        final IMap map = createMap();
+        map.put(1, 1);
+        Object result = map.executeOnKey(1, new IncrementorEntryProcessor());
+        assertEquals(2, result);
+    }
+
+    @Test
     public void testSubmitToKey() throws Exception {
         final IMap map = createMap();
         map.put(1, 1);
@@ -519,9 +543,11 @@ public class ClientMapTest {
         final IMap map = createMap();
         map.put(1, 1);
         final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicInteger result = new AtomicInteger();
         ExecutionCallback executionCallback = new ExecutionCallback() {
             @Override
             public void onResponse(Object response) {
+                result.set((Integer) response);
                 latch.countDown();
             }
 
@@ -532,6 +558,7 @@ public class ClientMapTest {
 
         map.submitToKey(1, new IncrementorEntryProcessor(), executionCallback);
         assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertEquals(2, result.get());
         assertEquals(2, map.get(1));
     }
 

@@ -210,11 +210,11 @@ public abstract class AbstractNearCacheRecordStore<
 
     }
 
-    protected void onPut(K key, V value, R record, boolean newPut) {
+    protected void onPut(K key, V value, R record, R oldRecord) {
 
     }
 
-    protected void onPutError(K key, V value, R record, boolean newPut, Throwable error) {
+    protected void onPutError(K key, V value, R record, R oldRecord, Throwable error) {
 
     }
 
@@ -268,24 +268,20 @@ public abstract class AbstractNearCacheRecordStore<
         checkAvailable();
 
         R record = null;
-        boolean newPut = false;
+        R oldRecord = null;
         try {
-            record = getRecord(key);
-            if (record == null) {
-                newPut = true;
-                record = valueToRecord(value);
-                onRecordCreate(record);
-                putRecord(key, record);
+            record = valueToRecord(value);
+            onRecordCreate(record);
+            oldRecord = putRecord(key, record);
+            if (oldRecord == null) {
                 nearCacheStats.incrementOwnedEntryCount();
             } else {
-                long oldRecordMemoryCost = getRecordStorageMemoryCost(record);
-                putToRecord(record, value);
-                long newRecordMemoryCost = getRecordStorageMemoryCost(record);
-                nearCacheStats.incrementOwnedEntryMemoryCost(newRecordMemoryCost - oldRecordMemoryCost);
+                long oldRecordMemoryCost = getRecordStorageMemoryCost(oldRecord);
+                nearCacheStats.decrementOwnedEntryMemoryCost(oldRecordMemoryCost);
             }
-            onPut(key, value, record, newPut);
+            onPut(key, value, record, oldRecord);
         } catch (Throwable error) {
-            onPutError(key, value, record, newPut, error);
+            onPutError(key, value, record, oldRecord, error);
             throw ExceptionUtil.rethrow(error);
         }
     }
@@ -371,6 +367,15 @@ public abstract class AbstractNearCacheRecordStore<
 
         if (isEvictionEnabled()) {
             evictionStrategy.evict(records, evictionPolicyEvaluator, evictionChecker, this);
+        }
+    }
+
+    @Override
+    public void doEviction() {
+        checkAvailable();
+
+        if (isEvictionEnabled()) {
+            evictionStrategy.evict(records, evictionPolicyEvaluator, null, this);
         }
     }
 

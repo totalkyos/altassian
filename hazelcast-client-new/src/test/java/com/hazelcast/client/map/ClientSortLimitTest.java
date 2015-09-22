@@ -16,8 +16,7 @@
 
 package com.hazelcast.client.map;
 
-import com.hazelcast.client.HazelcastClient;
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.client.test.TestHazelcastFactory;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 import com.hazelcast.nio.serialization.DefaultSerializationServiceBuilder;
@@ -26,14 +25,12 @@ import com.hazelcast.query.PagingPredicate;
 import com.hazelcast.query.Predicate;
 import com.hazelcast.query.Predicates;
 import com.hazelcast.query.impl.QueryEntry;
-import com.hazelcast.test.HazelcastSerialClassRunner;
+import com.hazelcast.test.HazelcastParallelClassRunner;
 import com.hazelcast.test.HazelcastTestSupport;
 import com.hazelcast.test.annotation.QuickTest;
 import com.hazelcast.util.IterationType;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -55,35 +52,23 @@ import static junit.framework.Assert.assertTrue;
 /**
  * Used for testing {@link PagingPredicate}
  */
-@RunWith(HazelcastSerialClassRunner.class)
+@RunWith(HazelcastParallelClassRunner.class)
 @Category(QuickTest.class)
 public class ClientSortLimitTest extends HazelcastTestSupport {
 
-    static HazelcastInstance client;
-    static HazelcastInstance server1;
-    static HazelcastInstance server2;
-
-    static IMap map;
-    static int pageSize = 5;
-    static int size = 50;
-
-    final private SerializationService ss = new DefaultSerializationServiceBuilder().build();
-
-    @BeforeClass
-    public static void createInstances(){
-        server1 = Hazelcast.newHazelcastInstance();
-        server2 = Hazelcast.newHazelcastInstance();
-        client = HazelcastClient.newHazelcastClient();
-    }
-
-    @AfterClass
-    public static void shutdownInstances(){
-        HazelcastClient.shutdownAll();
-        Hazelcast.shutdownAll();
-    }
+    private final TestHazelcastFactory hazelcastFactory = new TestHazelcastFactory();
+    private final SerializationService ss = new DefaultSerializationServiceBuilder().build();
+    private HazelcastInstance client;
+    private HazelcastInstance server;
+    private IMap map;
+    private int pageSize = 5;
+    private int size = 50;
 
     @Before
-    public void init() {
+    public void setup() {
+        server = hazelcastFactory.newHazelcastInstance();
+        hazelcastFactory.newHazelcastInstance();
+        client = hazelcastFactory.newHazelcastClient();
         map = client.getMap(randomString());
         for (int i = 0; i < size; i++) {
             map.put(i, i);
@@ -91,8 +76,8 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
     }
 
     @After
-    public void reset() {
-        map.destroy();
+    public void tearDown() {
+        hazelcastFactory.terminateAll();
     }
 
     @Test
@@ -124,17 +109,16 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
 
     @Test
     public void testGoToNextPageAfterTheEnd() {
-        final PagingPredicate predicate = new PagingPredicate(pageSize);
-
-        for (int i = 0; i < size / pageSize; i++) {
-            predicate.nextPage();
-        }
+        PagingPredicate predicate = new PagingPredicate(pageSize);
+        predicate.setPage(size / pageSize - 1);
 
         Collection<Integer> values = map.values(predicate);
-        values = map.values(predicate);
-
-        assertEquals(size / pageSize - 1, predicate.getPage());
         assertIterableEquals(values, 45, 46, 47, 48, 49);
+
+        predicate.nextPage();
+        values = map.values(predicate);
+        assertEquals(0, values.size());
+
     }
 
     @Test
@@ -163,12 +147,10 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
         assertIterableEquals(values, 8, 7, 6, 5, 4);
 
         predicate.nextPage();
-        assertEquals(4, predicate.getAnchor().getValue());
         values = map.values(predicate);
         assertIterableEquals(values, 3, 2, 1, 0);
 
         predicate.nextPage();
-        assertEquals(0, predicate.getAnchor().getValue());
         values = map.values(predicate);
         assertEquals(0, values.size());
     }
@@ -187,12 +169,10 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
         assertIterableEquals(keySet, 42, 43, 44, 45, 46);
 
         predicate.nextPage();
-        assertEquals(46, predicate.getAnchor().getKey());
         keySet = map.keySet(predicate);
         assertIterableEquals(keySet, 47, 48, 49, 50);
 
         predicate.nextPage();
-        assertEquals(50, predicate.getAnchor().getKey());
         keySet = map.keySet(predicate);
         assertEquals(0, keySet.size());
     }
@@ -284,7 +264,7 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
 
         List<Employee> expected = new ArrayList<Employee>();
         for (Employee e : map.values()) {
-            if(e.getId() >= minId && e.getId() <= maxId){
+            if (e.getId() >= minId && e.getId() <= maxId) {
                 expected.add(e);
             }
         }
@@ -307,7 +287,7 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
 
         List<Employee> expected = new ArrayList<Employee>();
         for (Employee e : map.values()) {
-            if (e.getId() < maxId){
+            if (e.getId() < maxId) {
                 expected.add(e);
             }
         }
@@ -343,7 +323,7 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
     }
 
     private IMap<Integer, Employee> makeEmployeeMap(int maxEmployees) {
-        final IMap<Integer, Employee> map = server1.getMap(randomString());
+        final IMap<Integer, Employee> map = server.getMap(randomString());
         for (int i = 0; i < maxEmployees; i++) {
             Employee e = new Employee(i);
             map.put(e.id, e);
@@ -351,7 +331,7 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
         return map;
     }
 
-    private List<Employee> pagingPredicateWithEmployeeObjectTest(IMap<Integer, Employee> map, Predicate predicate, int pageSize){
+    private List<Employee> pagingPredicateWithEmployeeObjectTest(IMap<Integer, Employee> map, Predicate predicate, int pageSize) {
         PagingPredicate pagingPredicate = new PagingPredicate(predicate, pageSize);
         Set<Map.Entry<Integer, Employee>> set;
         List<Employee> results = new ArrayList<Employee>();
@@ -364,7 +344,7 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
                 results.add(e);
             }
             pagingPredicate.nextPage();
-        } while(!set.isEmpty());
+        } while (!set.isEmpty());
 
         return results;
     }
@@ -381,7 +361,7 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
                 (queriedElementCount / PAGE_SIZE) +
                         (queriedElementCount % PAGE_SIZE == 0 ? 0 : 1);
 
-        for(int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 1000; i++) {
             map.put(i, new Employee(i));
         }
 
@@ -393,9 +373,9 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
         Collection<Employee> values;
         int passedPageCount = 0;
 
-        for (   values = map.values(predicate); !values.isEmpty() &&
+        for (values = map.values(predicate); !values.isEmpty() &&
                 passedPageCount <= expectedPageCount; // To prevent from infinite loop
-                values = map.values(predicate)) {
+             values = map.values(predicate)) {
             predicate.nextPage();
             passedPageCount++;
         }
@@ -422,9 +402,9 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
         PagingPredicate predicate = new PagingPredicate(pred, PAGE_SIZE);
         Collection<BaseEmployee> values;
 
-        for (   values = map.values(predicate); !values.isEmpty() &&
+        for (values = map.values(predicate); !values.isEmpty() &&
                 values != null;
-                values = map.values(predicate)) {
+             values = map.values(predicate)) {
             predicate.nextPage();
         }
     }
@@ -463,9 +443,9 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
     }
 
 
-    private static class EmployeeIdComparitor implements Comparator<Employee>{
+    private static class EmployeeIdComparitor implements Comparator<Employee> {
         public int compare(Employee e1, Employee e2) {
-            return e1.getId() -  e2.getId();
+            return e1.getId() - e2.getId();
         }
     }
 
@@ -491,22 +471,24 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
             setAtributesRandomly();
         }
 
-        public void setAtributesRandomly(){
+        public static String getRandomName() {
+            return names[random.nextInt(names.length)];
+        }
+
+        public void setAtributesRandomly() {
             name = names[random.nextInt(names.length)];
             age = random.nextInt(MAX_AGE);
             active = random.nextBoolean();
             salary = random.nextDouble() * MAX_SALARY;
         }
 
-        public static String getRandomName(){
-            return names[random.nextInt(names.length)];
-        }
-
         public String getName() {
             return name;
         }
 
-        public int getId() { return id; }
+        public int getId() {
+            return id;
+        }
 
         public int getAge() {
             return age;
@@ -523,7 +505,7 @@ public class ClientSortLimitTest extends HazelcastTestSupport {
         @Override
         public boolean equals(Object obj) {
             if (obj instanceof Employee) {
-                return id == ((Employee)obj).getId();
+                return id == ((Employee) obj).getId();
             }
             return false;
         }

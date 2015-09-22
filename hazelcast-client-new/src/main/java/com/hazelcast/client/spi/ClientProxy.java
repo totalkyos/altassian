@@ -16,10 +16,12 @@
 
 package com.hazelcast.client.spi;
 
+import com.hazelcast.client.impl.ClientMessageDecoder;
 import com.hazelcast.client.impl.HazelcastClientInstanceImpl;
 import com.hazelcast.client.impl.protocol.ClientMessage;
 import com.hazelcast.client.impl.protocol.codec.ClientDestroyProxyCodec;
 import com.hazelcast.client.spi.impl.ClientInvocation;
+import com.hazelcast.client.spi.impl.ListenerRemoveCodec;
 import com.hazelcast.core.DistributedObject;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.nio.Address;
@@ -42,16 +44,18 @@ public abstract class ClientProxy implements DistributedObject {
         this.objectName = objectName;
     }
 
-    protected final String listen(ClientMessage registrationRequest, Object partitionKey, EventHandler handler) {
-        return context.getListenerService().startListening(registrationRequest, partitionKey, handler);
+    protected final String listen(ClientMessage registrationRequest, Object partitionKey,
+                                  EventHandler handler, ClientMessageDecoder responseDecoder) {
+        return context.getListenerService().startListening(registrationRequest, partitionKey, handler, responseDecoder);
     }
 
-    protected final String listen(ClientMessage registrationRequest, EventHandler handler) {
-        return context.getListenerService().startListening(registrationRequest, null, handler);
+    protected final String listen(ClientMessage registrationRequest, EventHandler handler,
+                                  ClientMessageDecoder responseDecoder) {
+        return context.getListenerService().startListening(registrationRequest, null, handler, responseDecoder);
     }
 
-    protected final boolean stopListening(ClientMessage clientMessage, String registrationId) {
-        return context.getListenerService().stopListening(clientMessage, registrationId);
+    protected final boolean stopListening(String registrationId, ListenerRemoveCodec listenerRemoveCodec) {
+        return context.getListenerService().stopListening(registrationId, listenerRemoveCodec);
     }
 
     protected final ClientContext getContext() {

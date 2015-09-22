@@ -1,7 +1,8 @@
 package com.hazelcast.client.partitionservice;
 
-import com.hazelcast.client.HazelcastClient;
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.client.config.ClientConfig;
+import com.hazelcast.client.impl.HazelcastClientInstanceImpl;
+import com.hazelcast.client.test.TestHazelcastFactory;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.nio.Address;
 import com.hazelcast.nio.ObjectDataInput;
@@ -17,7 +18,7 @@ import com.hazelcast.spi.EventRegistration;
 import com.hazelcast.spi.impl.PortablePartitionLostEvent;
 import com.hazelcast.spi.impl.eventservice.InternalEventService;
 import com.hazelcast.test.AssertTask;
-import com.hazelcast.test.HazelcastSerialClassRunner;
+import com.hazelcast.test.HazelcastParallelClassRunner;
 import com.hazelcast.test.annotation.QuickTest;
 import org.junit.After;
 import org.junit.Test;
@@ -28,9 +29,11 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
+import static com.hazelcast.client.impl.ClientTestUtil.getHazelcastClientInstanceImpl;
 import static com.hazelcast.partition.InternalPartitionService.PARTITION_LOST_EVENT_TOPIC;
 import static com.hazelcast.partition.InternalPartitionService.SERVICE_NAME;
 import static com.hazelcast.test.HazelcastTestSupport.assertTrueEventually;
+import static com.hazelcast.test.HazelcastTestSupport.getAddress;
 import static com.hazelcast.test.HazelcastTestSupport.getNode;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -38,20 +41,21 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@RunWith(HazelcastSerialClassRunner.class)
+@RunWith(HazelcastParallelClassRunner.class)
 @Category(QuickTest.class)
 public class ClientPartitionLostListenerTest {
 
+    private final TestHazelcastFactory hazelcastFactory = new TestHazelcastFactory();
+
     @After
-    public void destroy() {
-        HazelcastClient.shutdownAll();
-        Hazelcast.shutdownAll();
+    public void tearDown() {
+        hazelcastFactory.terminateAll();
     }
 
     @Test
     public void test_partitionLostListener_registered() {
-        final HazelcastInstance instance = Hazelcast.newHazelcastInstance();
-        final HazelcastInstance client = HazelcastClient.newHazelcastClient();
+        final HazelcastInstance instance = hazelcastFactory.newHazelcastInstance();
+        final HazelcastInstance client = hazelcastFactory.newHazelcastClient();
 
         client.getPartitionService().addPartitionLostListener(mock(PartitionLostListener.class));
 
@@ -60,8 +64,8 @@ public class ClientPartitionLostListenerTest {
 
     @Test
     public void test_partitionLostListener_removed() {
-        final HazelcastInstance instance = Hazelcast.newHazelcastInstance();
-        final HazelcastInstance client = HazelcastClient.newHazelcastClient();
+        final HazelcastInstance instance = hazelcastFactory.newHazelcastInstance();
+        final HazelcastInstance client = hazelcastFactory.newHazelcastClient();
 
         final String registrationId = client.getPartitionService().addPartitionLostListener(mock(PartitionLostListener.class));
         assertRegistrationsSizeEventually(instance, 1);
@@ -72,9 +76,9 @@ public class ClientPartitionLostListenerTest {
 
     @Test
     public void test_partitionLostListener_invoked() {
-        final HazelcastInstance instance = Hazelcast.newHazelcastInstance(null);
+        final HazelcastInstance instance = hazelcastFactory.newHazelcastInstance();
 
-        final HazelcastInstance client = HazelcastClient.newHazelcastClient();
+        final HazelcastInstance client = hazelcastFactory.newHazelcastClient();
         final EventCollectingPartitionLostListener listener = new EventCollectingPartitionLostListener();
 
         client.getPartitionService().addPartitionLostListener(listener);
@@ -90,9 +94,16 @@ public class ClientPartitionLostListenerTest {
 
     @Test
     public void test_partitionLostListener_invoked_fromOtherNode() {
-        final HazelcastInstance instance1 = Hazelcast.newHazelcastInstance(null);
-        final HazelcastInstance instance2 = Hazelcast.newHazelcastInstance(null);
-        final HazelcastInstance client = HazelcastClient.newHazelcastClient();
+        final HazelcastInstance instance1 = hazelcastFactory.newHazelcastInstance();
+        final HazelcastInstance instance2 = hazelcastFactory.newHazelcastInstance();
+        final ClientConfig clientConfig = new ClientConfig();
+        clientConfig.getNetworkConfig().setSmartRouting(false);
+        final HazelcastInstance client = hazelcastFactory.newHazelcastClient(clientConfig);
+
+        final HazelcastClientInstanceImpl clientInstanceImpl = getHazelcastClientInstanceImpl(client);
+        final Address clientOwnerAddress = clientInstanceImpl.getClientClusterService().getOwnerConnectionAddress();
+
+        final HazelcastInstance other = getAddress(instance1).equals(clientOwnerAddress) ? instance2 : instance1;
 
         final EventCollectingPartitionLostListener listener = new EventCollectingPartitionLostListener();
         client.getPartitionService().addPartitionLostListener(listener);
@@ -100,7 +111,7 @@ public class ClientPartitionLostListenerTest {
         assertRegistrationsSizeEventually(instance1, 1);
         assertRegistrationsSizeEventually(instance2, 1);
 
-        final InternalPartitionServiceImpl partitionService = getNode(instance2).getNodeEngine().getService(SERVICE_NAME);
+        final InternalPartitionServiceImpl partitionService = getNode(other).getNodeEngine().getService(SERVICE_NAME);
         final int partitionId = 5;
         partitionService.onPartitionLost(new InternalPartitionLostEvent(partitionId, 0, null));
 

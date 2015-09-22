@@ -68,6 +68,7 @@ import com.hazelcast.map.impl.operation.LoadMapOperation;
 import com.hazelcast.map.impl.operation.MapFlushOperation;
 import com.hazelcast.map.impl.operation.MapGetAllOperationFactory;
 import com.hazelcast.map.impl.operation.MultipleEntryOperationFactory;
+import com.hazelcast.map.impl.operation.PartitionCheckIfLoadedOperation;
 import com.hazelcast.map.impl.operation.PartitionCheckIfLoadedOperationFactory;
 import com.hazelcast.map.impl.operation.PartitionWideEntryWithPredicateOperationFactory;
 import com.hazelcast.map.impl.operation.PutAllOperation;
@@ -109,6 +110,7 @@ import com.hazelcast.spi.OperationFactory;
 import com.hazelcast.spi.OperationService;
 import com.hazelcast.spi.impl.BinaryOperationFactory;
 import com.hazelcast.util.ExceptionUtil;
+import com.hazelcast.util.FutureUtil;
 import com.hazelcast.util.IterableUtil;
 import com.hazelcast.util.IterationType;
 import com.hazelcast.util.ThreadUtil;
@@ -131,9 +133,12 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static com.hazelcast.map.impl.MapService.SERVICE_NAME;
+import static com.hazelcast.util.FutureUtil.logAllExceptions;
 import static com.hazelcast.util.IterableUtil.nullToEmpty;
 import static com.hazelcast.util.Preconditions.checkNotNull;
 import static java.util.Collections.singleton;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static java.util.logging.Level.WARNING;
 
 abstract class MapProxySupport extends AbstractDistributedObject<MapService> implements InitializingObject {
 
@@ -207,23 +212,39 @@ abstract class MapProxySupport extends AbstractDistributedObject<MapService> imp
     }
 
     private <T extends EventListener> T initializeListener(ListenerConfig listenerConfig) {
-        T listener = null;
-        if (listenerConfig.getImplementation() != null) {
-            listener = (T) listenerConfig.getImplementation();
-        } else if (listenerConfig.getClassName() != null) {
-            try {
-                return ClassLoaderUtil
-                        .newInstance(getNodeEngine().getConfigClassLoader(), listenerConfig.getClassName());
-            } catch (Exception e) {
-                throw ExceptionUtil.rethrow(e);
-            }
-        }
+        T listener = getListenerImplOrNull(listenerConfig);
 
         if (listener instanceof HazelcastInstanceAware) {
             ((HazelcastInstanceAware) listener).setHazelcastInstance(getNodeEngine().getHazelcastInstance());
         }
 
         return listener;
+    }
+
+    private <T extends EventListener> T getListenerImplOrNull(ListenerConfig listenerConfig) {
+        EventListener implementation = listenerConfig.getImplementation();
+        if (implementation != null) {
+
+            // For this instanceOf check please see EntryListenerConfig#toEntryListener.
+            if (implementation instanceof EntryListenerConfig.MapListenerToEntryListenerAdapter) {
+                return (T) ((EntryListenerConfig.MapListenerToEntryListenerAdapter) implementation).getMapListener();
+            }
+
+            return (T) implementation;
+        }
+
+        String className = listenerConfig.getClassName();
+        if (className != null) {
+            try {
+                ClassLoader configClassLoader = getNodeEngine().getConfigClassLoader();
+                return ClassLoaderUtil.newInstance(configClassLoader, className);
+            } catch (Exception e) {
+                throw ExceptionUtil.rethrow(e);
+            }
+        }
+
+        // returning null to preserve previous behavior.
+        return null;
     }
 
     // this operation returns the object in data format except
@@ -633,15 +654,15 @@ abstract class MapProxySupport extends AbstractDistributedObject<MapService> imp
         final NodeEngine nodeEngine = getNodeEngine();
         try {
             OperationService operationService = nodeEngine.getOperationService();
+            int mapNamePartition = partitionService.getPartitionId(name);
+
+            Operation op = new PartitionCheckIfLoadedOperation(name, false, true);
+            Future loadingFuture = operationService.invokeOnPartition(SERVICE_NAME, op, mapNamePartition);
+            // wait for keys to be loaded
+            FutureUtil.waitWithDeadline(singleton(loadingFuture), 1, SECONDS, logAllExceptions(WARNING));
+
             OperationFactory opFactory = new PartitionCheckIfLoadedOperationFactory(name);
-
-            Map<Integer, Object> results;
-            Collection<Integer> mapNamePartition = getPartitionsForKeys(singleton(toData(name)));
-
-            results = operationService.invokeOnPartitions(SERVICE_NAME, opFactory, mapNamePartition);
-            waitAllTrue(results);
-
-            results = operationService.invokeOnAllPartitions(SERVICE_NAME, opFactory);
+            Map<Integer, Object> results = operationService.invokeOnAllPartitions(SERVICE_NAME, opFactory);
             waitAllTrue(results);
 
         } catch (Throwable t) {

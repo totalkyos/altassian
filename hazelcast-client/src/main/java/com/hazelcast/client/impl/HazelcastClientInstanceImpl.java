@@ -9,6 +9,7 @@ import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientNetworkConfig;
 import com.hazelcast.client.config.ClientProperties;
 import com.hazelcast.client.config.ClientSecurityConfig;
+import com.hazelcast.client.connection.AddressProvider;
 import com.hazelcast.client.connection.AddressTranslator;
 import com.hazelcast.client.connection.ClientConnectionManager;
 import com.hazelcast.client.connection.nio.ClientConnectionManagerImpl;
@@ -23,6 +24,7 @@ import com.hazelcast.client.spi.ClientListenerService;
 import com.hazelcast.client.spi.ClientPartitionService;
 import com.hazelcast.client.spi.ClientTransactionManagerService;
 import com.hazelcast.client.spi.ProxyManager;
+import com.hazelcast.client.spi.impl.AwsAddressProvider;
 import com.hazelcast.client.spi.impl.AwsAddressTranslator;
 import com.hazelcast.client.spi.impl.ClientClusterServiceImpl;
 import com.hazelcast.client.spi.impl.ClientExecutionServiceImpl;
@@ -31,10 +33,12 @@ import com.hazelcast.client.spi.impl.ClientListenerServiceImpl;
 import com.hazelcast.client.spi.impl.ClientNonSmartInvocationServiceImpl;
 import com.hazelcast.client.spi.impl.ClientPartitionServiceImpl;
 import com.hazelcast.client.spi.impl.ClientSmartInvocationServiceImpl;
-import com.hazelcast.client.spi.impl.DefaultAddressTranslator;
 import com.hazelcast.client.spi.impl.ClientTransactionManagerServiceImpl;
+import com.hazelcast.client.spi.impl.DefaultAddressProvider;
+import com.hazelcast.client.spi.impl.DefaultAddressTranslator;
 import com.hazelcast.client.util.RoundRobinLB;
 import com.hazelcast.collection.impl.list.ListService;
+import com.hazelcast.collection.impl.queue.QueueService;
 import com.hazelcast.collection.impl.set.SetService;
 import com.hazelcast.concurrent.atomiclong.AtomicLongService;
 import com.hazelcast.concurrent.atomicreference.AtomicReferenceService;
@@ -78,10 +82,10 @@ import com.hazelcast.multimap.impl.MultiMapService;
 import com.hazelcast.nio.ClassLoaderUtil;
 import com.hazelcast.nio.serialization.Data;
 import com.hazelcast.nio.serialization.SerializationService;
-import com.hazelcast.collection.impl.queue.QueueService;
 import com.hazelcast.quorum.QuorumService;
 import com.hazelcast.replicatedmap.impl.ReplicatedMapService;
 import com.hazelcast.ringbuffer.Ringbuffer;
+import com.hazelcast.ringbuffer.impl.RingbufferService;
 import com.hazelcast.security.Credentials;
 import com.hazelcast.security.UsernamePasswordCredentials;
 import com.hazelcast.spi.impl.SerializableCollection;
@@ -98,6 +102,7 @@ import com.hazelcast.util.ServiceLoader;
 
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
@@ -130,7 +135,9 @@ public class HazelcastClientInstanceImpl implements HazelcastInstance, Serializa
     private final ClientExtension clientExtension;
     private final Credentials credentials;
 
-    public HazelcastClientInstanceImpl(ClientConfig config) {
+    public HazelcastClientInstanceImpl(ClientConfig config,
+                                       ClientConnectionManagerFactory clientConnectionManagerFactory,
+                                       AddressProvider externalAddressProvider) {
         this.config = config;
         final GroupConfig groupConfig = config.getGroupConfig();
         instanceName = "hz.client_" + id + (groupConfig != null ? "_" + groupConfig.getName() : "");
@@ -143,18 +150,40 @@ public class HazelcastClientInstanceImpl implements HazelcastInstance, Serializa
         clientProperties = new ClientProperties(config);
         serializationService = clientExtension.createSerializationService();
         proxyManager = new ProxyManager(this);
-        executionService = initExecutorService();
+        executionService = initExecutionService();
         loadBalancer = initLoadBalancer(config);
         transactionManager = new ClientTransactionManagerServiceImpl(this, loadBalancer);
         partitionService = new ClientPartitionServiceImpl(this);
-        connectionManager = initClientConnectionManager();
-        clusterService = new ClientClusterServiceImpl(this);
+        connectionManager = clientConnectionManagerFactory.createConnectionManager(config, this);
+        Collection<AddressProvider> addressProviders = createAddressProviders(externalAddressProvider);
+        clusterService = new ClientClusterServiceImpl(this, addressProviders);
         invocationService = initInvocationService();
         listenerService = initListenerService();
         userContext = new ConcurrentHashMap<String, Object>();
         nearCacheManager = clientExtension.createNearCacheManager();
 
         proxyManager.init(config);
+    }
+
+    private Collection<AddressProvider> createAddressProviders(AddressProvider externalAddressProvider) {
+        ClientNetworkConfig networkConfig = getClientConfig().getNetworkConfig();
+        final ClientAwsConfig awsConfig = networkConfig.getAwsConfig();
+        Collection<AddressProvider> addressProviders = new LinkedList<AddressProvider>();
+
+        addressProviders.add(new DefaultAddressProvider(networkConfig));
+        if (externalAddressProvider != null) {
+            addressProviders.add(externalAddressProvider);
+        }
+
+        if (awsConfig != null && awsConfig.isEnabled()) {
+            try {
+                addressProviders.add(new AwsAddressProvider(awsConfig));
+            } catch (NoClassDefFoundError e) {
+                LOGGER.log(Level.WARNING, "hazelcast-cloud.jar might be missing!");
+                throw e;
+            }
+        }
+        return addressProviders;
     }
 
     private LoadBalancer initLoadBalancer(ClientConfig config) {
@@ -221,7 +250,7 @@ public class HazelcastClientInstanceImpl implements HazelcastInstance, Serializa
         return new ClientListenerServiceImpl(this, eventThreadCount, eventQueueCapacity);
     }
 
-    private ClientExecutionServiceImpl initExecutorService() {
+    private ClientExecutionServiceImpl initExecutionService() {
         return new ClientExecutionServiceImpl(instanceName, threadGroup,
                 config.getClassLoader(), config.getExecutorPoolSize());
     }
@@ -238,22 +267,6 @@ public class HazelcastClientInstanceImpl implements HazelcastInstance, Serializa
         loadBalancer.init(getCluster(), config);
         partitionService.start();
         clientExtension.afterStart(this);
-    }
-
-    ClientConnectionManager initClientConnectionManager() {
-        final ClientAwsConfig awsConfig = config.getNetworkConfig().getAwsConfig();
-        AddressTranslator addressTranslator;
-        if (awsConfig != null && awsConfig.isEnabled()) {
-            try {
-                addressTranslator = new AwsAddressTranslator(awsConfig);
-            } catch (NoClassDefFoundError e) {
-                LOGGER.log(Level.WARNING, "hazelcast-cloud.jar might be missing!");
-                throw e;
-            }
-        } else {
-            addressTranslator = new DefaultAddressTranslator();
-        }
-        return new ClientConnectionManagerImpl(this, addressTranslator);
     }
 
     @Override
@@ -326,7 +339,7 @@ public class HazelcastClientInstanceImpl implements HazelcastInstance, Serializa
 
     @Override
     public <E> Ringbuffer<E> getRingbuffer(String name) {
-        throw new UnsupportedOperationException();
+        return getDistributedObject(RingbufferService.SERVICE_NAME, name);
     }
 
     @Override
@@ -526,6 +539,7 @@ public class HazelcastClientInstanceImpl implements HazelcastInstance, Serializa
 
     public void doShutdown() {
         proxyManager.destroy();
+        clusterService.shutdown();
         executionService.shutdown();
         partitionService.stop();
         transactionManager.shutdown();

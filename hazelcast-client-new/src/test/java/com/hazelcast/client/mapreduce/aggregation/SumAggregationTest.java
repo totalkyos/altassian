@@ -20,7 +20,7 @@ import com.hazelcast.core.IMap;
 import com.hazelcast.mapreduce.aggregation.Aggregation;
 import com.hazelcast.mapreduce.aggregation.Aggregations;
 import com.hazelcast.mapreduce.aggregation.Supplier;
-import com.hazelcast.test.HazelcastSerialClassRunner;
+import com.hazelcast.test.HazelcastParallelClassRunner;
 import com.hazelcast.test.annotation.QuickTest;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -32,7 +32,7 @@ import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
 
-@RunWith(HazelcastSerialClassRunner.class)
+@RunWith(HazelcastParallelClassRunner.class)
 @Category(QuickTest.class)
 public class SumAggregationTest
         extends AbstractAggregationTest {
@@ -251,7 +251,7 @@ public class SumAggregationTest
             throws Exception {
 
         String mapName = randomMapName();
-        IMap<String, T> map = HAZELCAST_INSTANCE.getMap(mapName);
+        IMap<String, T> map = client.getMap(mapName);
 
         for (int i = 0; i < values.length; i++) {
             map.put("key-" + i, values[i]);
@@ -265,7 +265,7 @@ public class SumAggregationTest
             throws Exception {
 
         String mapName = randomMapName();
-        IMap<String, Value<T>> map = HAZELCAST_INSTANCE.getMap(mapName);
+        IMap<String, Value<T>> map = client.getMap(mapName);
 
         for (int i = 0; i < values.length; i++) {
             map.put("key-" + i, values[i]);
