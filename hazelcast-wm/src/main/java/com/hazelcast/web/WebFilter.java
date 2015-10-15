@@ -479,7 +479,12 @@ public class WebFilter implements Filter {
                     return hazelcastSession;
                 }
                 originalSessions.remove(originalSession.getId());
-                originalSession.invalidate();
+                try {
+                    originalSession.invalidate();
+                } catch (IllegalStateException e) {
+                    // session already invalidated - just ignore
+                    LOGGER.finest("session.invalidate() failed", e);
+                }
             }
             if (clusteredSessionId != null) {
                 hazelcastSession = sessions.get(clusteredSessionId);
