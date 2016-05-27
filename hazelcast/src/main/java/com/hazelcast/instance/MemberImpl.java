@@ -93,7 +93,6 @@ public final class MemberImpl extends AbstractMember implements Member, Hazelcas
         return logger;
     }
 
-    @Override
     public Set<Capability> getCapabilities() {
         return capabilities;
     }
@@ -326,6 +325,7 @@ public final class MemberImpl extends AbstractMember implements Member, Hazelcas
         return ClusterDataSerializerHook.MEMBER;
     }
 
+    @Override
     public boolean hasCapability(Capability capability) {
         return capabilities.contains(capability);
     }

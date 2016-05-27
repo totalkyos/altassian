@@ -218,7 +218,7 @@ public class LocalRegionCache extends MembershipAdapter implements RegionCache {
     @Override
     public void memberAdded(MembershipEvent membershipEvent)
     {
-        if (membershipEvent.getMember().getCapabilities().contains(Capability.PARTITION_HOST)) {
+        if (membershipEvent.getMember().hasCapability(Capability.PARTITION_HOST)) {
             // Members that have left the cluster and re-joined may be an inconsistent state due to the
             // potential for "split brain".  So err on the side of safety and flush the local cache.
             cache.clear();
