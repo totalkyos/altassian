@@ -23,6 +23,7 @@ import com.hazelcast.nio.ObjectDataOutput;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -59,6 +60,11 @@ public class SimpleMemberImpl implements Member {
     @Override
     public InetSocketAddress getInetSocketAddress() {
         return getSocketAddress();
+    }
+
+    @Override
+    public Set<Capability> getCapabilities() {
+        return Collections.emptySet();
     }
 
     @Override

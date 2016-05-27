@@ -23,6 +23,7 @@ import com.hazelcast.logging.ILogger;
 import com.hazelcast.nio.Address;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -158,6 +159,11 @@ public final class MemberImpl extends AbstractMember implements Member {
     @Override
     public void removeAttribute(String key) {
         throw notSupportedOnClient();
+    }
+
+    @Override
+    public Set<Capability> getCapabilities() {
+        return Collections.emptySet();
     }
 
     private UnsupportedOperationException notSupportedOnClient() {

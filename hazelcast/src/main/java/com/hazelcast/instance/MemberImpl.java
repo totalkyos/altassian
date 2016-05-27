@@ -93,6 +93,7 @@ public final class MemberImpl extends AbstractMember implements Member, Hazelcas
         return logger;
     }
 
+    @Override
     public Set<Capability> getCapabilities() {
         return capabilities;
     }

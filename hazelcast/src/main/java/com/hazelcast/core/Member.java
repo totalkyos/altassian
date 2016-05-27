@@ -68,6 +68,13 @@ public interface Member extends DataSerializable, Endpoint {
     InetSocketAddress getInetSocketAddress();
 
     /**
+     * Get the capabilities that this member has in the cluster
+     * @return the capabilities for this member.
+     * @since 3.5.2-atlassian-25
+     */
+    Set<Capability> getCapabilities();
+
+    /**
      * Change the capabilities this member has in the cluster
      * @param capabilities The new capabilities for this member.
      * @since 3.6
