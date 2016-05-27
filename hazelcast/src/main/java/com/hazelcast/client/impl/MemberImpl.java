@@ -22,6 +22,7 @@ import com.hazelcast.instance.Capability;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.nio.Address;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -155,6 +156,11 @@ public final class MemberImpl
     @Override
     public void removeAttribute(String key) {
         notSupportedOnClient();
+    }
+
+    @Override
+    public Set<Capability> getCapabilities() {
+        return Collections.emptySet();
     }
 
     @Override

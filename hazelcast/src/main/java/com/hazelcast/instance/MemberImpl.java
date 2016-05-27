@@ -95,6 +95,7 @@ public final class MemberImpl
         return logger;
     }
 
+    @Override
     public Set<Capability> getCapabilities() {
         return capabilities;
     }
