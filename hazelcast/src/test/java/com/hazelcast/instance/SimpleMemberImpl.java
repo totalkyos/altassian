@@ -22,7 +22,6 @@ import com.hazelcast.nio.ObjectDataOutput;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -53,8 +52,8 @@ public class SimpleMemberImpl implements Member {
     }
 
     @Override
-    public Set<Capability> getCapabilities() {
-        return EnumSet.allOf(Capability.class);
+    public boolean hasCapability(Capability capability) {
+        return true;
     }
 
     @Override

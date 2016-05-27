@@ -95,7 +95,6 @@ public final class MemberImpl
         return logger;
     }
 
-    @Override
     public Set<Capability> getCapabilities() {
         return capabilities;
     }
@@ -358,6 +357,7 @@ public final class MemberImpl
         return ClusterDataSerializerHook.MEMBER;
     }
 
+    @Override
     public boolean hasCapability(Capability capability) {
         return capabilities.contains(capability);
     }
