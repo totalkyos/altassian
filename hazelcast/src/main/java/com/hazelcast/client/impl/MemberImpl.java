@@ -158,6 +158,11 @@ public final class MemberImpl
     }
 
     @Override
+    public boolean hasCapability(Capability capability) {
+        return false;
+    }
+
+    @Override
     public void updateCapabilities(Set<Capability> capabilities) {
         throw new UnsupportedOperationException("Capabilities on remote members must not be changed");
     }

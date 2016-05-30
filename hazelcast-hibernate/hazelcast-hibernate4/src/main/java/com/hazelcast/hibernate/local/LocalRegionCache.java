@@ -24,6 +24,7 @@ import com.hazelcast.hibernate.RegionCache;
 import com.hazelcast.hibernate.serialization.Expirable;
 import com.hazelcast.hibernate.serialization.ExpiryMarker;
 import com.hazelcast.hibernate.serialization.Value;
+import com.hazelcast.instance.Capability;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
 import com.hazelcast.util.Clock;
@@ -40,7 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Local only {@link com.hazelcast.hibernate.RegionCache} implementation
  * based on a topic to distribute cache updates.
  */
-public class LocalRegionCache implements RegionCache {
+public class LocalRegionCache extends MembershipAdapter implements RegionCache {
 
     private static final long SEC_TO_MS = 1000L;
     private static final int MAX_SIZE = 100000;
@@ -99,6 +100,7 @@ public class LocalRegionCache implements RegionCache {
         } else {
             topic = null;
         }
+        hazelcastInstance.getCluster().addMembershipListener(this);
     }
 
     public Object get(final Object key, long txTimestamp) {
@@ -195,6 +197,16 @@ public class LocalRegionCache implements RegionCache {
                 }
             }
         };
+    }
+
+    @Override
+    public void memberAdded(MembershipEvent membershipEvent)
+    {
+        if (membershipEvent.getMember().hasCapability(Capability.PARTITION_HOST)) {
+            // Members that have left the cluster and re-joined may be an inconsistent state due to the
+            // potential for "split brain".  So err on the side of safety and flush the local cache.
+            cache.clear();
+        }
     }
 
     public boolean remove(final Object key) {

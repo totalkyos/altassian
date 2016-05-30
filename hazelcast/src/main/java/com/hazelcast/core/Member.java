@@ -52,9 +52,17 @@ public interface Member extends DataSerializable, Endpoint {
     InetSocketAddress getInetSocketAddress();
 
     /**
+     * Find whether or not the member has a capability
+     * @param capability the capability to check
+     * @return {@code true} if the member has the specified capability, {@code false} otherwise.
+     * @since 3.5.2-atlassian-25
+     */
+    boolean hasCapability(Capability capability);
+
+    /**
      * Change the capabilities this member has in the cluster
      * @param capabilities The new capabilities for this member.
-     * @since 3.4
+     * @since 3.3.2-atlassian-5
      */
     void updateCapabilities(Set<Capability> capabilities);
 

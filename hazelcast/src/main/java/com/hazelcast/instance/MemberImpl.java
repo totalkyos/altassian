@@ -357,6 +357,7 @@ public final class MemberImpl
         return ClusterDataSerializerHook.MEMBER;
     }
 
+    @Override
     public boolean hasCapability(Capability capability) {
         return capabilities.contains(capability);
     }
