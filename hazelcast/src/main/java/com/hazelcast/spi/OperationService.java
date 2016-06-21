@@ -88,6 +88,8 @@ public interface OperationService {
     @Deprecated
     long getExecutedOperationCount();
 
+    long getExecutedRemoteOperationCount();
+
     /**
      * Dumps all kinds of metrics: for example, performance. This can be used for performance analysis. In the future we'll have a
      * more formal (such as map with key/value pairs) information.
