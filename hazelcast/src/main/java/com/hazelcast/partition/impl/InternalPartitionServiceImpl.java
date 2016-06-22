@@ -19,6 +19,7 @@ package com.hazelcast.partition.impl;
 import com.hazelcast.cluster.ClusterState;
 import com.hazelcast.cluster.MemberInfo;
 import com.hazelcast.cluster.impl.ClusterServiceImpl;
+import com.hazelcast.cluster.impl.MemberSelectingCollection;
 import com.hazelcast.core.ExecutionCallback;
 import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.HazelcastInstanceNotActiveException;
@@ -410,7 +411,7 @@ public class InternalPartitionServiceImpl implements InternalPartitionService, M
 
     private Collection<MemberGroup> createMemberGroups() {
 //        final Collection<Member> members = node.getClusterService().getMembers(DATA_MEMBER_SELECTOR);
-        return memberGroupFactory.createMemberGroups(getPartitionHosts());
+        return memberGroupFactory.createMemberGroups(new MemberSelectingCollection(getPartitionHosts(), DATA_MEMBER_SELECTOR));
     }
 
     private Collection<MemberImpl> getPartitionHosts() {
