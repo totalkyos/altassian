@@ -2,6 +2,7 @@ package com.hazelcast.hibernate.local;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.MapConfig;
+import com.hazelcast.core.Cluster;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.ITopic;
 import com.hazelcast.core.MessageListener;
@@ -27,6 +28,8 @@ public class LocalRegionCacheTest {
     @Test
     public void testConstructorIgnoresUnsupportedOperationExceptionsFromConfig() {
         HazelcastInstance instance = mock(HazelcastInstance.class);
+        Cluster cluster = mock(Cluster.class);
+        when(instance.getCluster()).thenReturn(cluster);
         doThrow(UnsupportedOperationException.class).when(instance).getConfig();
 
         new LocalRegionCache(CACHE_NAME, instance, null, false);
@@ -63,6 +66,8 @@ public class LocalRegionCacheTest {
         when(config.findMapConfig(eq(CACHE_NAME))).thenReturn(mapConfig);
 
         HazelcastInstance instance = mock(HazelcastInstance.class);
+        Cluster cluster = mock(Cluster.class);
+        when(instance.getCluster()).thenReturn(cluster);
         when(instance.getConfig()).thenReturn(config);
 
         new LocalRegionCache(CACHE_NAME, instance, null, false);
@@ -77,6 +82,7 @@ public class LocalRegionCacheTest {
     public void testThreeArgConstructorRegistersTopicListener() {
         MapConfig mapConfig = mock(MapConfig.class);
 
+        Cluster cluster = mock(Cluster.class);
         Config config = mock(Config.class);
         when(config.findMapConfig(eq(CACHE_NAME))).thenReturn(mapConfig);
 
@@ -84,6 +90,7 @@ public class LocalRegionCacheTest {
         when(topic.addMessageListener(isNotNull(MessageListener.class))).thenReturn("ignored");
 
         HazelcastInstance instance = mock(HazelcastInstance.class);
+        when(instance.getCluster()).thenReturn(cluster);
         when(instance.getConfig()).thenReturn(config);
         when(instance.getTopic(eq(CACHE_NAME))).thenReturn(topic);
 

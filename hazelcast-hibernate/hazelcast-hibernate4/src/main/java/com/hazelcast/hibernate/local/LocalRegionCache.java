@@ -111,7 +111,10 @@ public class LocalRegionCache extends MembershipAdapter implements RegionCache {
         } else {
             topic = null;
         }
-        hazelcastInstance.getCluster().addMembershipListener(this);
+
+        if (hazelcastInstance != null) {
+            hazelcastInstance.getCluster().addMembershipListener(this);
+        }
     }
 
     public Object get(final Object key, long txTimestamp) {
