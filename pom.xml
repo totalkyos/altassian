@@ -118,9 +118,9 @@
         </license>
     </licenses>
     <scm>
-        <connection>scm:git:git://github.com/hazelcast/hazelcast.git</connection>
-        <developerConnection>scm:git:git@github.com:hazelcast/hazelcast.git</developerConnection>
-        <url>https://github.com/hazelcast/hazelcast/</url>
+        <connection>scm:git:git://github.com/atlassian/hazelcast.git</connection>
+        <developerConnection>scm:git:https://github.com/atlassian/hazelcast.git</developerConnection>
+        <url>https://github.com/atlassian/hazelcast/</url>
     </scm>
     <developers>
         <developer>
@@ -244,12 +244,12 @@
                     <runOrder>failedfirst</runOrder>
 
                     <!-- 1C means 1 process per cpu core -->
-                    <!-- forkCount>1C</forkCount>
+                    <forkCount>1C</forkCount>
                     <reuseForks>true</reuseForks>
 
                     <threadCount>1</threadCount>
                     <perCoreThreadCount>true</perCoreThreadCount>
-                    <parallel>methods</parallel -->
+                    <parallel>methods</parallel>
 
                     <!-- the argLine variable is needed for JaCoco -->
                     <argLine>
@@ -699,6 +699,20 @@
                             </execution>
                         </executions>
                     </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven.gpg.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
 
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
@@ -959,13 +973,13 @@
 
     <distributionManagement>
         <repository>
-            <id>release-repository</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
+            <id>atlassian-3rdparty</id>
+            <url>https://maven.atlassian.com/3rdparty</url>
         </repository>
         <snapshotRepository>
-            <id>snapshot-repository</id>
+            <id>atlassian-3rdparty-snapshot</id>
             <name>Maven2 Snapshot Repository</name>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <url>https://maven.atlassian.com/3rdparty-snapshot</url>
             <uniqueVersion>false</uniqueVersion>
         </snapshotRepository>
     </distributionManagement>
